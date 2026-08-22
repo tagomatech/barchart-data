@@ -107,6 +107,13 @@ python -m unittest discover -s Barchart/tests -v
 python -m unittest discover -s tests -v
 ~~~
 
+## Contributions
+
+Contributions are welcome. Please open an issue or pull request for bug fixes,
+new data resources, additional asset classes, notebook ideas, and
+documentation improvements. Run both test commands above before submitting a
+change, and do not commit credentials or downloaded market data.
+
 ## Data rights
 
 This project is a client and transformation toolkit, not a data
