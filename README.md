@@ -24,6 +24,18 @@ For local development:
 python -m pip install -e ".[dev,demo]"
 ~~~
 
+The repository is also configured for tokenless PyPI publication through
+GitHub Actions. The GitHub install above works immediately. To enable the
+standard command python -m pip install barchart-data, create a PyPI trusted
+publisher for owner tagomatech, repository barchart-data, workflow
+.github/workflows/publish.yml, and environment pypi. Then publish a
+version tag:
+
+~~~powershell
+git tag v0.4.0
+git push origin v0.4.0
+~~~
+
 ## No-login public data
 
 The public client reads quote and instrument JSON embedded in Barchart
