@@ -76,6 +76,12 @@ OHLCV and open-interest history, draws candlesticks, and adds Screamer
 Bollinger Bands, ATR, RSI, and rolling volume mean indicators. It contains no
 synthetic data and does not stitch multiple contracts together.
 
+Open notebooks/commodities/agriculture_portfolio_demo.ipynb for the broader
+agriculture comparison. It uses the catalog's current first-nearby shortcuts
+for grains, oilseeds, livestock, and vegetable oils, including ICE Canada and
+Euronext Matif roots where available. Its rebased paths are fixed-contract
+comparisons, not continuous futures.
+
 Install the project demo extra before running the notebook. Screamer requires
 Python 3.11 or newer.
 

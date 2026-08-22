@@ -95,6 +95,11 @@ The compatibility Barchart package contains:
 Open notebooks/commodities/corn_futures_demo.ipynb in Jupyter or VS Code after installing
 the demo extra.
 
+The broader agriculture portfolio example is in
+notebooks/commodities/agriculture_portfolio_demo.ipynb. It covers current
+first-nearby contracts across grains, oilseeds, livestock, vegetable oils,
+ICE Canada, and Euronext Matif, plus rebased market-group comparisons.
+
 The equity research example is in
 notebooks/equities/equity_research_demo.ipynb. It covers a no-login AAPL
 workflow, the Barchart S&P 500 index, dividend-adjustment effects, Screamer
