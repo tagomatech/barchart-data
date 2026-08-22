@@ -92,8 +92,13 @@ The compatibility Barchart package contains:
 - a CME/CBOT September 2026 Corn notebook using real OHLCV data and Screamer
   indicators.
 
-Open Barchart/corn_futures_demo.ipynb in Jupyter or VS Code after installing
+Open notebooks/commodities/corn_futures_demo.ipynb in Jupyter or VS Code after installing
 the demo extra.
+
+The equity research example is in
+notebooks/equities/equity_research_demo.ipynb. It covers a no-login AAPL
+workflow, the Barchart S&P 500 index, dividend-adjustment effects, Screamer
+indicators, risk metrics, and a small example portfolio.
 
 ## Tests
 
