@@ -1,5 +1,5 @@
 # %% [markdown]
-# # Agriculture commodity portfolio: grains, oilseeds, livestock, and oils
+# # Agriculture commodity portfolio: grains, oilseeds, livestock, and vegetable oils
 #
 # This notebook uses the maintained Barchart agricultural catalog and the
 # no-login public historical route. It downloads the current first-nearby
