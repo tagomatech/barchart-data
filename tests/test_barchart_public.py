@@ -10,15 +10,22 @@ from barchart_data import (
 
 
 class FakeResponse:
-    def __init__(self, text, *, status_code=200):
+    def __init__(self, text, *, status_code=200, payload=None):
         self.text = text
         self.status_code = status_code
+        self.payload = payload
+        self.headers = {"content-type": "application/json"}
 
     def raise_for_status(self):
         if self.status_code >= 400:
             import requests
 
             raise requests.HTTPError(response=self)
+
+    def json(self):
+        if self.payload is not None:
+            return self.payload
+        return json.loads(self.text)
 
 
 class FakeSession:
@@ -102,6 +109,44 @@ class PublicBarchartClientTests(unittest.TestCase):
 
         with self.assertRaises(BarchartPublicPageError):
             client.page("ZCU26")
+
+    def test_history_uses_current_public_json_proxy(self):
+        session = FakeSession(
+            FakeResponse(
+                '{"count":1,"data":[{"symbol":"ZCU26",'
+                '"tradeTime":"2026-08-21","openPrice":"480",'
+                '"highPrice":"485","lowPrice":"479","lastPrice":"483.75",'
+                '"volume":"10","openInterest":"20"}]}',
+            )
+        )
+        client = BarchartPublicClient(session=session)
+
+        result = client.history(
+            "ZCU26",
+            start_date="2026-08-01",
+            end_date="2026-08-21",
+        )
+
+        self.assertEqual(result.loc[0, "symbol"], "ZCU26")
+        self.assertEqual(result.loc[0, "date"].strftime("%Y-%m-%d"), "2026-08-21")
+        self.assertEqual(result.loc[0, "close"], 483.75)
+        self.assertEqual(result.loc[0, "openInterest"], 20)
+        self.assertIn("/proxies/core-api/v1/historical/get", session.calls[0][0])
+        self.assertNotIn("apikey", session.calls[0][1]["params"])
+        self.assertEqual(
+            session.calls[0][1]["headers"]["Referer"],
+            "https://www.barchart.com/futures/quotes/ZCU26/overview",
+        )
+
+    def test_history_exposes_anonymous_access_denial_clearly(self):
+        session = FakeSession(FakeResponse('{"error":"Forbidden"}', status_code=403))
+        client = BarchartPublicClient(session=session)
+
+        with self.assertRaises(BarchartPublicPageError) as context:
+            client.history("AAPL", asset_class="stocks")
+
+        self.assertEqual(context.exception.status_code, 403)
+        self.assertIn("session or OnDemand API key", str(context.exception))
 
     def test_rejects_path_injection(self):
         client = BarchartPublicClient(session=FakeSession(FakeResponse("")))

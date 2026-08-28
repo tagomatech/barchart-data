@@ -1,4 +1,4 @@
-"""Typed, session-backed access to Barchart historical time-series data."""
+"""Typed compatibility access to Barchart historical time-series data."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from .exceptions import (
 
 ROOT = "https://www.barchart.com"
 API_EOD = f"{ROOT}/proxies/timeseries/historical/queryeod.ashx"
+API_PUBLIC_EOD = f"{ROOT}/proxies/core-api/v1/historical/get"
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -38,9 +39,9 @@ class BarchartClient(requests.Session):
 
     The class remains a requests.Session for backwards compatibility, but
     adds a bounded timeout, retry policy, typed errors, and a deterministic
-    response decoder. The web-session handshake is enabled by default to match
-    the original package behavior. Pass handshake=False when the caller
-    manages cookies or is testing the decoder offline.
+    response decoder. The normal handshake now routes history through
+    Barchart's current public JSON endpoint. Pass handshake=False when the
+    caller is testing the retired CSV endpoint decoder with prepared cookies.
     """
 
     def __init__(
@@ -63,16 +64,17 @@ class BarchartClient(requests.Session):
         self.headers.update({"User-Agent": ua or DEFAULT_USER_AGENT})
         self._configure_retries(max_retries, retry_backoff_factor)
 
+        self._use_public_api = False
         if handshake:
-            response = self._request(
+            self._request(
                 ROOT,
                 timeout=_validate_timeout(handshake_timeout, "handshake_timeout"),
             )
-            if not self._xsrf_cookie():
-                raise RuntimeError(
-                    "Barchart did not return an XSRF-TOKEN cookie during the "
-                    "authentication handshake."
-                )
+            # Barchart's current public pages no longer issue the cookie used
+            # by the retired timeseries endpoint. Keep the old cookie path for
+            # explicitly prepared sessions, but use the current public JSON
+            # route for the normal compatibility client.
+            self._use_public_api = True
 
     def _configure_retries(self, max_retries: int, backoff_factor: float) -> None:
         retry = Retry(
@@ -165,6 +167,34 @@ class BarchartClient(requests.Session):
         if start is not None and end is not None:
             if pd.Timestamp(start) > pd.Timestamp(end):
                 raise ValueError("start_date must be earlier than or equal to end_date")
+
+        if self._use_public_api:
+            from barchart_data.public import PublicBarchartClient
+
+            asset_class = extra_params.pop("asset_class", "futures")
+            public_client = PublicBarchartClient(
+                session=self,
+                request_timeout=self.request_timeout,
+                max_retries=0,
+            )
+            return public_client.history(
+                symbol,
+                asset_class=asset_class,
+                maxrecords=maxrecords,
+                data=data,
+                out=out,
+                startDate=startDate,
+                endDate=endDate,
+                start_date=start_date,
+                end_date=end_date,
+                volume=volume,
+                order=order,
+                dividends=dividends,
+                backadjust=backadjust,
+                daystoexpiration=daystoexpiration,
+                contractroll=contractroll,
+                **extra_params,
+            )
 
         params: dict[str, Any] = {
             "symbol": symbol,

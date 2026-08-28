@@ -1,8 +1,8 @@
 """Modern Barchart market-data client.
 
 The authenticated client targets Barchart OnDemand endpoint families. The
-public-web history adapter is exported separately as a compatibility path and
-does not represent the official API.
+public client reads public quote pages and the current browser-facing history
+route; it does not represent the official API.
 """
 
 from .client import BarchartDataClient, OnDemandClient
@@ -50,4 +50,4 @@ __all__ = [
     "rebase_to_base",
 ]
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"

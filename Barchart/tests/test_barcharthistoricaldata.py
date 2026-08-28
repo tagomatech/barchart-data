@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest.mock import Mock
 
@@ -8,11 +9,24 @@ from Barchart.exceptions import BarchartDecodeError
 
 
 class FakeResponse:
-    def __init__(self, text, *, content_type="text/plain", status_code=200):
+    def __init__(
+        self,
+        text,
+        *,
+        content_type="text/plain",
+        status_code=200,
+        payload=None,
+    ):
         self.text = text
         self.headers = {"content-type": content_type}
         self.status_code = status_code
+        self.payload = payload
         self.raise_for_status = Mock()
+
+    def json(self):
+        if self.payload is not None:
+            return self.payload
+        return json.loads(self.text)
 
 
 def client_for(response):
@@ -121,15 +135,34 @@ class BarchartHistoricalDataTests(unittest.TestCase):
                 with self.assertRaises(BarchartDecodeError):
                     client.history("KCZ25")
 
-    def test_handshake_requires_xsrf_cookie(self):
+    def test_handshake_uses_current_public_route_without_xsrf_cookie(self):
         response = FakeResponse("ok")
         with unittest.mock.patch.object(
             BarchartClient,
             "get",
             return_value=response,
         ):
-            with self.assertRaises(RuntimeError):
-                BarchartClient(max_retries=0)
+            client = BarchartClient(max_retries=0)
+
+        self.assertTrue(client._use_public_api)
+
+    def test_default_history_delegates_to_current_public_route(self):
+        handshake = FakeResponse("ok")
+        history = FakeResponse(
+            '{"data":[{"symbol":"ZCU26","tradeTime":"2026-08-21",'
+            '"lastPrice":"483.75"}]}',
+            content_type="application/json",
+        )
+        with unittest.mock.patch.object(
+            BarchartClient,
+            "get",
+            side_effect=[handshake, history],
+        ) as request:
+            client = BarchartClient(max_retries=0)
+            result = client.history("ZCU26", start_date="2026-08-01")
+
+        self.assertEqual(result.loc[0, "close"], 483.75)
+        self.assertIn("/proxies/core-api/v1/historical/get", request.call_args.args[0])
 
 
 if __name__ == "__main__":

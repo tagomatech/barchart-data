@@ -21,9 +21,9 @@ python -m pip install -e '.[demo]'
 
 The package is split into three replaceable layers:
 
-- **Client**: BarchartClient handles the web-session handshake, retries,
-  timeouts, HTTP errors, and CSV/JSON decoding. BarchartHistoricalData remains
-  as a backwards-compatible alias.
+- **Client**: BarchartClient remains the legacy web-session client for
+  compatibility. PublicBarchartClient uses Barchart's current public-page
+  quote/profile feed and browser-facing history JSON route.
 - **Fetcher**: BaseFetcher is a small protocol. BarchartFetcher adapts the
   client to the builder and leaves rate limiting/configuration at the boundary.
 - **Builder**: ContinuousFuturesBuilder handles contract cycles, date
@@ -85,13 +85,17 @@ comparisons, not continuous futures.
 Install the project demo extra before running the notebook. Screamer requires
 Python 3.11 or newer.
 
-The client applies the requested inclusive start and end dates after decoding
-the response, because the upstream endpoint can return rows outside the
-requested window.
+The public client applies the requested inclusive start and end dates after
+decoding the response, because the upstream endpoint can return rows outside
+the requested window. Anonymous history is subject to Barchart's access
+controls; a 401/403 is reported as BarchartPublicPageError and is not retried
+through an undocumented authentication bypass.
 
-The client uses Barchart's web-session cookie handshake and endpoint, so it is
-subject to Barchart availability and any access terms that apply to your use of
-the service. No credentials are stored by this package.
+The legacy client uses Barchart's web-session cookie handshake and endpoint.
+The public client uses the current public-page route without storing
+credentials. Both are subject to Barchart availability and the access terms
+that apply to your use of the service. For guaranteed historical API access,
+use the official OnDemand client with an API key.
 
 ## Agricultural catalog and relative comparison
 

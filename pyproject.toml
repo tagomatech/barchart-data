@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "barchart-data"
-version = "0.4.0"
+version = "0.4.1"
 description = "No-login public and optional authenticated Barchart market data client"
 readme = "README.md"
 requires-python = ">=3.10"
