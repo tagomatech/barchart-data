@@ -97,6 +97,11 @@ credentials. Both are subject to Barchart availability and the access terms
 that apply to your use of the service. For guaranteed historical API access,
 use the official OnDemand client with an API key.
 
+Public requests are deliberately paced at one second apart per client.
+Overview pages are cached for five minutes, while historical responses are
+not cached. Increase the interval for larger jobs and reuse one client
+instance so its cache and pacing apply across the whole job.
+
 ## Agricultural catalog and relative comparison
 
 commoditycatalog.py is the source of truth for the agriculture roots. Each

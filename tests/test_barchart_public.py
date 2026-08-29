@@ -1,5 +1,6 @@
 import json
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -48,6 +49,54 @@ def page_html(payload):
 
 
 class PublicBarchartClientTests(unittest.TestCase):
+    def test_public_page_is_cached_and_can_be_cleared(self):
+        session = FakeSession(
+            FakeResponse(
+                page_html(
+                    {
+                        "ZCU26": {
+                            "instrument": {"name": "Corn Futures"},
+                            "quote": {"close": 483.75},
+                        }
+                    }
+                )
+            )
+        )
+        client = BarchartPublicClient(
+            session=session,
+            min_request_interval=0,
+            page_cache_ttl=300,
+        )
+
+        client.page("ZCU26")
+        client.profile("ZCU26")
+        self.assertEqual(len(session.calls), 1)
+
+        client.clear_cache("ZCU26", asset_class="futures")
+        client.page("ZCU26")
+        self.assertEqual(len(session.calls), 2)
+
+    def test_request_gate_waits_between_uncached_requests(self):
+        client = BarchartPublicClient(
+            session=FakeSession(FakeResponse("<html></html>")),
+            min_request_interval=1.0,
+            page_cache_ttl=0,
+        )
+
+        with patch("barchart_data.public.monotonic", side_effect=[0.0, 0.0]), patch(
+            "barchart_data.public.sleep"
+        ) as pause:
+            client._wait_for_request_slot()
+            client._wait_for_request_slot()
+
+        pause.assert_called_once_with(1.0)
+
+    def test_rate_and_cache_settings_reject_negative_values(self):
+        with self.assertRaises(ValueError):
+            BarchartPublicClient(min_request_interval=-1)
+        with self.assertRaises(ValueError):
+            BarchartPublicClient(page_cache_ttl=-1)
+
     def test_quote_decodes_public_page_without_api_key(self):
         session = FakeSession(
             FakeResponse(

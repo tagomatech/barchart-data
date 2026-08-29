@@ -23,7 +23,7 @@ from .exceptions import (
 OutputFormat: TypeAlias = Literal["df", "json", "text"]
 ResponsePayload: TypeAlias = dict[str, Any] | list[Any] | pd.DataFrame | str
 DEFAULT_BASE_URL = "https://ondemand.websol.barchart.com"
-DEFAULT_USER_AGENT = "barchart-data/0.3.0"
+DEFAULT_USER_AGENT = "barchart-data/0.4.2"
 
 
 class BarchartDataClient:

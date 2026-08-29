@@ -11,6 +11,8 @@ import html
 import json
 import re
 from collections.abc import Mapping, Sequence
+from threading import Lock
+from time import monotonic, sleep
 from typing import Any, Literal, TypeAlias
 
 import pandas as pd
@@ -27,10 +29,11 @@ from .exceptions import (
 PUBLIC_ROOT = "https://www.barchart.com"
 INLINE_DATA_ID = "barchart-www-inline-data"
 DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/125 Safari/537.36"
+    "barchart-data/0.4.2 "
+    "(+https://github.com/tagomatech/barchart-data)"
 )
+DEFAULT_MIN_REQUEST_INTERVAL = 1.0
+DEFAULT_PAGE_CACHE_TTL = 300.0
 PublicOutput = pd.DataFrame | list[dict[str, Any]]
 PublicHistoryOutput: TypeAlias = (
     pd.DataFrame | list[dict[str, Any]] | dict[str, Any] | str
@@ -64,17 +67,32 @@ class PublicBarchartClient:
         user_agent: str | None = None,
         request_timeout: float | tuple[float, float] = 15.0,
         max_retries: int = 2,
-        retry_backoff_factor: float = 0.25,
+        retry_backoff_factor: float = 1.0,
+        min_request_interval: float = DEFAULT_MIN_REQUEST_INTERVAL,
+        page_cache_ttl: float | None = DEFAULT_PAGE_CACHE_TTL,
     ) -> None:
         if max_retries < 0:
             raise ValueError("max_retries must be >= 0")
         if retry_backoff_factor < 0:
             raise ValueError("retry_backoff_factor must be >= 0")
+        if min_request_interval < 0:
+            raise ValueError("min_request_interval must be >= 0")
+        if page_cache_ttl is not None and page_cache_ttl < 0:
+            raise ValueError("page_cache_ttl must be >= 0 or None")
         self.request_timeout = _validate_timeout(request_timeout)
         self.web_base_url = web_base_url.rstrip("/")
+        self.min_request_interval = min_request_interval
+        self.page_cache_ttl = page_cache_ttl
         self.session = session or requests.Session()
         self.session.headers.update({"User-Agent": user_agent or DEFAULT_USER_AGENT})
         self._configure_retries(max_retries, retry_backoff_factor)
+        self._request_lock = Lock()
+        self._next_request_at = 0.0
+        self._page_cache: dict[
+            tuple[str, str], tuple[float, dict[str, Any]]
+        ] = {}
+        self._cache_lock = Lock()
+
     def _configure_retries(self, max_retries: int, backoff_factor: float) -> None:
         mount = getattr(self.session, "mount", None)
         if mount is None:
@@ -93,6 +111,38 @@ class PublicBarchartClient:
         mount("http://", adapter)
         mount("https://", adapter)
 
+    def _wait_for_request_slot(self) -> None:
+        """Serialize this client's requests with a small polite delay."""
+        if self.min_request_interval == 0:
+            return
+        with self._request_lock:
+            now = monotonic()
+            delay = max(0.0, self._next_request_at - now)
+            self._next_request_at = max(now, self._next_request_at) + (
+                self.min_request_interval
+            )
+            if delay:
+                sleep(delay)
+
+    def clear_cache(
+        self,
+        symbol: str | None = None,
+        *,
+        asset_class: str | None = None,
+    ) -> None:
+        """Clear cached public pages, optionally for one symbol/category."""
+        with self._cache_lock:
+            if symbol is None and asset_class is None:
+                self._page_cache.clear()
+                return
+            keys = list(self._page_cache)
+            for key_symbol, key_asset_class in keys:
+                if symbol is not None and key_symbol != symbol:
+                    continue
+                if asset_class is not None and key_asset_class != asset_class:
+                    continue
+                self._page_cache.pop((key_symbol, key_asset_class), None)
+
     def page_url(self, symbol: str, *, asset_class: str = "futures") -> str:
         """Return the public overview URL for a symbol."""
         symbol = _validate_symbol(symbol)
@@ -102,8 +152,22 @@ class PublicBarchartClient:
     def page(self, symbol: str, *, asset_class: str = "futures") -> dict[str, Any]:
         """Fetch and decode the complete embedded page payload."""
         symbol = _validate_symbol(symbol)
+        asset_class = _validate_asset_class(asset_class)
         url = self.page_url(symbol, asset_class=asset_class)
+        cache_key = (symbol, asset_class)
+        if self.page_cache_ttl != 0:
+            with self._cache_lock:
+                cached = self._page_cache.get(cache_key)
+                if cached is not None:
+                    cached_at, payload = cached
+                    if (
+                        self.page_cache_ttl is None
+                        or monotonic() - cached_at < self.page_cache_ttl
+                    ):
+                        return dict(payload)
+                    self._page_cache.pop(cache_key, None)
         try:
+            self._wait_for_request_slot()
             response = self.session.get(url, timeout=self.request_timeout)
             response.raise_for_status()
         except requests.HTTPError as exc:
@@ -135,7 +199,11 @@ class PublicBarchartClient:
             raise BarchartDecodeError(
                 f"Barchart public page payload for {symbol} must be an object."
             )
-        return dict(payload)
+        result = dict(payload)
+        if self.page_cache_ttl != 0:
+            with self._cache_lock:
+                self._page_cache[cache_key] = (monotonic(), result)
+        return dict(result)
 
     def quote(
         self,
@@ -291,6 +359,7 @@ class PublicBarchartClient:
 
         url = f"{self.web_base_url}/proxies/core-api/v1/historical/get"
         try:
+            self._wait_for_request_slot()
             response = self.session.get(
                 url,
                 params=params,

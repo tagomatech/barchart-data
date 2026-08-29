@@ -24,9 +24,8 @@ ROOT = "https://www.barchart.com"
 API_EOD = f"{ROOT}/proxies/timeseries/historical/queryeod.ashx"
 API_PUBLIC_EOD = f"{ROOT}/proxies/core-api/v1/historical/get"
 DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/125 Safari/537.36"
+    "barchart-data/0.4.2 "
+    "(+https://github.com/tagomatech/barchart-data)"
 )
 HistoryOutput: TypeAlias = pd.DataFrame | list[dict[str, Any]] | dict[str, Any] | str
 Timeout: TypeAlias = float | tuple[float, float]
@@ -52,7 +51,7 @@ class BarchartClient(requests.Session):
         handshake_timeout: Timeout = 10.0,
         request_timeout: Timeout = 15.0,
         max_retries: int = 2,
-        retry_backoff_factor: float = 0.25,
+        retry_backoff_factor: float = 1.0,
     ) -> None:
         super().__init__()
         if max_retries < 0:
@@ -61,10 +60,13 @@ class BarchartClient(requests.Session):
             raise ValueError("retry_backoff_factor must be >= 0")
 
         self.request_timeout = _validate_timeout(request_timeout, "request_timeout")
+        self._max_retries = max_retries
+        self._retry_backoff_factor = retry_backoff_factor
         self.headers.update({"User-Agent": ua or DEFAULT_USER_AGENT})
         self._configure_retries(max_retries, retry_backoff_factor)
 
         self._use_public_api = False
+        self._public_client: Any | None = None
         if handshake:
             self._request(
                 ROOT,
@@ -172,12 +174,14 @@ class BarchartClient(requests.Session):
             from barchart_data.public import PublicBarchartClient
 
             asset_class = extra_params.pop("asset_class", "futures")
-            public_client = PublicBarchartClient(
-                session=self,
-                request_timeout=self.request_timeout,
-                max_retries=0,
-            )
-            return public_client.history(
+            if self._public_client is None:
+                self._public_client = PublicBarchartClient(
+                    session=self,
+                    request_timeout=self.request_timeout,
+                    max_retries=self._max_retries,
+                    retry_backoff_factor=self._retry_backoff_factor,
+                )
+            return self._public_client.history(
                 symbol,
                 asset_class=asset_class,
                 maxrecords=maxrecords,

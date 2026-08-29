@@ -62,6 +62,12 @@ may limit anonymous history to a recent window or return HTTP 401/403. In that
 case use the official OnDemand client with an API key. The adapter preserves
 the field names returned by Barchart instead of silently manufacturing values.
 
+The public client spaces uncached requests by one second, caches overview pages
+for five minutes, and honors Barchart's Retry-After response when retrying
+transient errors. Increase min_request_interval or use a longer page_cache_ttl
+for a longer-lived process. Keep the defaults, or use a longer interval, for
+regular research jobs.
+
 ## Optional OnDemand client
 
 The authenticated client is available when official API coverage is required.
