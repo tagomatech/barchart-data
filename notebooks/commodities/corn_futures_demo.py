@@ -1,14 +1,18 @@
+# ruff: noqa: E402
+
 # %% [markdown]
 # # CME/CBOT Corn Sep 2026 (ZCU26)
 #
-# This notebook focuses on one real, tradable contract. It fetches the
-# historical OHLCV and open-interest data for ZCU26 from Barchart, draws
-# candlesticks, and adds causal streaming indicators from Screamer.
+# This notebook focuses on one real, tradable contract. It reads the
+# historical OHLCV and open-interest data for ZCU26 from the official
+# OnDemand API or a CSV downloaded from Barchart, draws candlesticks, and
+# adds causal streaming indicators from Screamer.
 #
 # The chart uses only actual data for this named contract. It does not stitch
 # multiple contracts together, so ZCU26 remains the same contract throughout.
 
 # %%
+import os
 from pathlib import Path
 import sys
 
@@ -21,6 +25,8 @@ if repo_root is None:
     raise RuntimeError("Run this demo from a checkout containing the Barchart folder.")
 sys.path.insert(0, str(repo_root))
 
+# The imports intentionally follow the checkout bootstrap above.
+# ruff: noqa: E402
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
@@ -30,26 +36,40 @@ from IPython.display import display
 from matplotlib.patches import Rectangle
 from screamer import ATR, BollingerBands, RollingMean, RollingRSI
 
-from Barchart import BarchartHistoricalData
+from barchart_data import BarchartDataClient, read_barchart_history_csv
 
 CONTRACT = "ZCU26"
 HISTORY_START = "2023-12-01"
 PLOT_SESSIONS = 180
+API_KEY = os.getenv("BARCHART_API_KEY")
+HISTORY_CSV = Path(
+    os.getenv("BARCHART_HISTORY_CSV", "data/ZCU26-history.csv")
+)
 
 # %% [markdown]
 # ## 1. Fetch actual Barchart data
 #
-# The client applies the final inclusive date bounds after decoding the
-# response, because the upstream endpoint can return extra rows.
+# Use the official API for reproducible automated downloads. Alternatively,
+# download the permitted CSV manually from Barchart's historical-data page and
+# point BARCHART_HISTORY_CSV at that file.
 
 # %%
-client = BarchartHistoricalData()
-history = client.history(
-    CONTRACT,
-    start_date=HISTORY_START,
-    end_date=None,
-    out="df",
-)
+if API_KEY:
+    client = BarchartDataClient(api_key=API_KEY)
+    history = client.market.history(
+        CONTRACT,
+        start_date=HISTORY_START,
+        end_date=None,
+        output="df",
+        method="POST",
+    )
+elif HISTORY_CSV.is_file():
+    history = read_barchart_history_csv(HISTORY_CSV, symbol=CONTRACT)
+else:
+    raise RuntimeError(
+        "Set BARCHART_API_KEY for the official API, or place a permitted "
+        f"Barchart CSV at {HISTORY_CSV}."
+    )
 if history.empty:
     raise ValueError(f"No Barchart rows returned for {CONTRACT}.")
 
@@ -260,7 +280,8 @@ axes[3].xaxis.set_major_formatter(mdates.DateFormatter("%b\n%Y"))
 fig.text(
     0.01,
     0.01,
-    "Source: Barchart historical endpoint | Screamer indicators | fixed contract: ZCU26",
+    "Source: Barchart OnDemand API or permitted CSV export | "
+    "Screamer indicators | fixed contract: ZCU26",
     color=muted,
     fontsize=9,
 )
@@ -307,5 +328,6 @@ display(recent)
 # arrays and live streams. The package is used here for Bollinger Bands, ATR,
 # RSI, and rolling volume mean.
 #
-# Running this notebook requires internet access and a working Barchart
-# session. The package does not store credentials.
+# Running this notebook requires either BARCHART_API_KEY or a permitted local
+# Barchart CSV export. The package does not store credentials or automate
+# sign-in.

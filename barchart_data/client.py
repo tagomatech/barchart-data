@@ -21,9 +21,10 @@ from .exceptions import (
 )
 
 OutputFormat: TypeAlias = Literal["df", "json", "text"]
+RequestMethod: TypeAlias = Literal["GET", "POST"]
 ResponsePayload: TypeAlias = dict[str, Any] | list[Any] | pd.DataFrame | str
 DEFAULT_BASE_URL = "https://ondemand.websol.barchart.com"
-DEFAULT_USER_AGENT = "barchart-data/0.4.2"
+DEFAULT_USER_AGENT = "barchart-data/0.5.0"
 
 
 class BarchartDataClient:
@@ -49,7 +50,7 @@ class BarchartDataClient:
         self.api_key = api_key or os.getenv("BARCHART_API_KEY")
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        self.session = session or requests.Session()
+        self.session = session if session is not None else requests.Session()
         self.session.headers.update({"User-Agent": DEFAULT_USER_AGENT})
         self._configure_session(max_retries)
 
@@ -93,6 +94,7 @@ class BarchartDataClient:
         *,
         params: Mapping[str, Any] | None = None,
         output: OutputFormat = "df",
+        method: RequestMethod = "GET",
     ) -> ResponsePayload:
         """Call any OnDemand endpoint and normalize its response.
 
@@ -103,6 +105,11 @@ class BarchartDataClient:
 
         if output not in {"df", "json", "text"}:
             raise ValueError("output must be one of: df, json, text")
+        if not isinstance(method, str):
+            raise ValueError("method must be GET or POST")
+        method = method.upper()
+        if method not in {"GET", "POST"}:
+            raise ValueError("method must be GET or POST")
         normalized_endpoint = endpoint.strip().strip("/")
         if not normalized_endpoint:
             raise ValueError("endpoint must not be empty")
@@ -125,11 +132,18 @@ class BarchartDataClient:
         url = f"{self.base_url}/{request_path}"
 
         try:
-            response = self.session.get(
-                url,
-                params=request_params,
-                timeout=self.timeout,
-            )
+            if method == "GET":
+                response = self.session.get(
+                    url,
+                    params=request_params,
+                    timeout=self.timeout,
+                )
+            else:
+                response = self.session.post(
+                    url,
+                    data=request_params,
+                    timeout=self.timeout,
+                )
             response.raise_for_status()
         except requests.HTTPError as exc:
             status_code = getattr(exc.response, "status_code", None)
@@ -172,10 +186,16 @@ class BarchartDataClient:
         *,
         params: Mapping[str, Any] | None = None,
         output: OutputFormat = "df",
+        method: RequestMethod = "GET",
     ) -> ResponsePayload:
         """Alias for request, useful for endpoint families not wrapped yet."""
 
-        return self.request(endpoint, params=params, output=output)
+        return self.request(
+            endpoint,
+            params=params,
+            output=output,
+            method=method,
+        )
 
     @staticmethod
     def _check_api_status(payload: Any, *, endpoint: str) -> None:

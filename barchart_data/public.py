@@ -29,7 +29,7 @@ from .exceptions import (
 PUBLIC_ROOT = "https://www.barchart.com"
 INLINE_DATA_ID = "barchart-www-inline-data"
 DEFAULT_USER_AGENT = (
-    "barchart-data/0.4.2 "
+    "barchart-data/0.5.0 "
     "(+https://github.com/tagomatech/barchart-data)"
 )
 DEFAULT_MIN_REQUEST_INTERVAL = 1.0

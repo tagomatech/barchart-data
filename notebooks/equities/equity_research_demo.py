@@ -1,18 +1,22 @@
+# ruff: noqa: E402
+
 # %% [markdown]
-# # Equity research without an API key: Apple, S&P 500, and a portfolio
+# # Equity research: Apple, S&P 500, and a portfolio
 #
 # This notebook demonstrates the equity side of barchart-data using public
-# Barchart pages and the public historical endpoint. It uses:
+# Barchart pages plus the official historical API or permitted local CSV
+# exports. It uses:
 #
 # - Apple (AAPL) for a company quote, profile, OHLCV chart, and indicators;
 # - the Barchart S&P 500 index symbol ($SPX) as a benchmark;
 # - an equal-weighted example portfolio of large, liquid equities;
 # - Barchart's dividend-adjusted versus unadjusted history option.
 #
-# No Barchart account, API key, or login is used. Public data can be delayed,
-# limited, or changed by the upstream site.
+# Public quote/profile fields do not require a login. Automated historical
+# data uses BARCHART_API_KEY; without a key, use permitted local CSV exports.
 
 # %%
+import os
 from pathlib import Path
 import sys
 
@@ -32,17 +36,21 @@ if repo_root is None:
     )
 sys.path.insert(0, str(repo_root))
 
+# The imports intentionally follow the checkout bootstrap above.
+# ruff: noqa: E402
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import screamer
 from IPython.display import display
 from matplotlib.patches import Rectangle
 from screamer import ATR, BollingerBands, RollingMean, RollingRSI
 
-from barchart_data import PublicBarchartClient
-from Barchart import BarchartHistoricalData
+from barchart_data import (
+    BarchartDataClient,
+    PublicBarchartClient,
+    read_barchart_history_csv,
+)
 
 EQUITY = "AAPL"
 BENCHMARK = "$SPX"
@@ -56,9 +64,13 @@ PORTFOLIO_WEIGHTS = {
     "JPM": 0.15,
     "XOM": 0.10,
 }
+API_KEY = os.getenv("BARCHART_API_KEY")
+HISTORY_DIR = Path(
+    os.getenv("BARCHART_HISTORY_DIR", "data/barchart_history")
+)
 
 public_client = PublicBarchartClient()
-history_client = BarchartHistoricalData()
+history_client = BarchartDataClient(api_key=API_KEY) if API_KEY else None
 
 # %% [markdown]
 # ## 1. Quote, company profile, and main metrics
@@ -87,25 +99,48 @@ quote_view = quote[[column for column in quote_columns if column in quote.column
 display(quote_view.T.rename(columns={0: "value"}))
 display(profile.T.rename(columns={0: "value"}))
 
-print("Data route: Barchart public pages and public historical endpoint")
-print("Credentials used: none")
+print(
+    "Data route:",
+    "Barchart public pages plus OnDemand API"
+    if API_KEY
+    else "Barchart public pages plus permitted local CSV exports",
+)
+print("Credentials used:", "BARCHART_API_KEY" if API_KEY else "none")
 
 # %% [markdown]
 # ## 2. Historical price data and Screamer indicators
 #
 # Barchart returns stock history as symbol, date, open, high, low, close, and
 # volume. The notebook uses the adjusted series for the research chart, then
-# compares it with the unadjusted series in the next section.
+# compares it with the unadjusted series in the next section. Local CSV
+# exports must be downloaded with the desired adjustment setting.
 
 # %%
 def fetch_history(symbol, *, dividends):
-    frame = history_client.history(
-        symbol,
-        start_date=START_DATE,
-        end_date=END_DATE,
-        out="df",
-        dividends=dividends,
-    )
+    if history_client is not None:
+        frame = history_client.market.history(
+            symbol,
+            start_date=START_DATE,
+            end_date=END_DATE,
+            output="df",
+            method="POST",
+            dividends=dividends,
+        )
+    else:
+        safe_symbol = symbol.replace("$", "index_").replace("*", "nearby")
+        candidates = [HISTORY_DIR / f"{safe_symbol}-{dividends}.csv"]
+        if dividends == "false":
+            candidates.append(HISTORY_DIR / f"{safe_symbol}.csv")
+        csv_path = next(
+            (candidate for candidate in candidates if candidate.is_file()),
+            None,
+        )
+        if csv_path is None:
+            raise FileNotFoundError(
+                f"No local Barchart CSV found for {symbol}; "
+                f"expected {HISTORY_DIR / (safe_symbol + '.csv')}."
+            )
+        frame = read_barchart_history_csv(csv_path, symbol=symbol)
     if frame.empty:
         raise ValueError(f"No historical rows returned for {symbol}.")
 
@@ -273,7 +308,8 @@ axes[2].xaxis.set_major_formatter(mdates.DateFormatter("%b\n%Y"))
 fig.text(
     0.01,
     0.01,
-    "Source: Barchart public historical endpoint | Screamer indicators",
+    "Source: Barchart OnDemand API or permitted CSV exports | "
+    "Screamer indicators",
     color=muted,
     fontsize=9,
 )
@@ -283,11 +319,10 @@ plt.show()
 # %% [markdown]
 # ## 4. Dividend-adjusted versus unadjusted prices
 #
-# The no-login Barchart historical route exposes a dividends option that
-# changes the historical price series for dividend and split adjustment. It
-# does not return a cash dividend event ledger in this public response.
-# Therefore this section shows the observable adjustment effect and labels it
-# as such rather than presenting it as a cash dividend amount.
+# The official Barchart history API exposes a dividends option that changes
+# the historical price series for dividend and split adjustment. A website
+# CSV must be downloaded with the desired adjustment setting. Neither workflow
+# returns a cash dividend event ledger in this demo.
 
 # %%
 dividend_effect = apple_raw[["date", "close"]].rename(
@@ -465,10 +500,10 @@ plt.show()
 # %% [markdown]
 # ## Takeaways
 #
-# This notebook demonstrates a useful no-login equity workflow:
+# This notebook demonstrates a useful equity workflow:
 #
 # 1. Read page-level company metadata and quote fields.
-# 2. Download and validate historical OHLCV data.
+# 2. Read and validate official API or website-exported OHLCV data.
 # 3. Apply causal Screamer indicators.
 # 4. Compare dividend-adjusted and unadjusted price histories.
 # 5. Calculate transparent performance and risk metrics.

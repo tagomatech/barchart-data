@@ -22,8 +22,10 @@ python -m pip install -e '.[demo]'
 The package is split into three replaceable layers:
 
 - **Client**: BarchartClient remains the legacy web-session client for
-  compatibility. PublicBarchartClient uses Barchart's current public-page
-  quote/profile feed and browser-facing history JSON route.
+  compatibility. PublicBarchartClient uses Barchart's public-page
+  quote/profile feed and a best-effort anonymous history route. The preferred
+  historical path is the documented OnDemand client or a locally downloaded
+  website CSV.
 - **Fetcher**: BaseFetcher is a small protocol. BarchartFetcher adapts the
   client to the builder and leaves rate limiting/configuration at the boundary.
 - **Builder**: ContinuousFuturesBuilder handles contract cycles, date
@@ -95,12 +97,33 @@ The legacy client uses Barchart's web-session cookie handshake and endpoint.
 The public client uses the current public-page route without storing
 credentials. Both are subject to Barchart availability and the access terms
 that apply to your use of the service. For guaranteed historical API access,
-use the official OnDemand client with an API key.
+use the official OnDemand client with an API key. Its getHistory response is
+normalized with a stable date field. Dates passed to that client are converted
+to Barchart's documented compact format. A POST request is available when the
+API key should not appear in the query string.
 
 Public requests are deliberately paced at one second apart per client.
 Overview pages are cached for five minutes, while historical responses are
 not cached. Increase the interval for larger jobs and reuse one client
 instance so its cache and pacing apply across the whole job.
+
+## Website CSV downloads
+
+Barchart's website provides a permitted manual historical-data download for
+eligible accounts. The package does not automate sign-in or the download
+button. Barchart controls the available history window and daily download
+quota by product; consult its [historical-data help](https://help.barchart.com/support/solutions/articles/242748-how-can-i-download-historical-data-).
+After downloading a CSV, call:
+
+~~~
+from barchart_data import read_barchart_history_csv
+
+history = read_barchart_history_csv("downloads/ZCU26-history.csv", symbol="ZCU26")
+~~~
+
+The importer accepts website/API header variants, retains source fields, and
+adds canonical date, open, high, low, close, volume, and openInterest fields
+where available.
 
 ## Agricultural catalog and relative comparison
 

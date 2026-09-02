@@ -1,10 +1,12 @@
+# ruff: noqa: E402
+
 # %% [markdown]
 # # Agriculture commodity portfolio: grains, oilseeds, livestock, and vegetable oils
 #
 # This notebook uses the maintained Barchart agricultural catalog and the
-# no-login public historical route. It downloads the current first-nearby
-# contract for each catalog root, preserves the source contract, and creates
-# transparent rebased price paths.
+# official OnDemand API or permitted local CSV exports. It downloads the
+# current first-nearby contract for each catalog root, preserves the source
+# contract, and creates transparent rebased price paths.
 #
 # The comparison is not a synthetic continuous futures series. Every line is
 # one fixed contract selected by Barchart's *1 shortcut at run time. Rebasing
@@ -12,6 +14,7 @@
 # create a tradable portfolio return.
 
 # %%
+import os
 from pathlib import Path
 import sys
 
@@ -24,18 +27,20 @@ if repo_root is None:
     raise RuntimeError("Run this demo from a checkout containing the Barchart folder.")
 sys.path.insert(0, str(repo_root))
 
+# The imports intentionally follow the checkout bootstrap above.
+# ruff: noqa: E402
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
 from IPython.display import display
 
 from Barchart import (
-    BarchartHistoricalData,
     agricultural_catalog,
     catalog_frame,
     rebase_frame,
     rebase_many,
 )
+from barchart_data import BarchartDataClient, read_barchart_history_csv
 
 START_DATE = "2024-01-01"
 END_DATE = None
@@ -45,8 +50,12 @@ CATEGORY_WEIGHTS = {
     "livestock": 0.20,
     "vegetable_oils": 0.10,
 }
+API_KEY = os.getenv("BARCHART_API_KEY")
+HISTORY_DIR = Path(
+    os.getenv("BARCHART_HISTORY_DIR", "data/barchart_history")
+)
 
-client = BarchartHistoricalData()
+api_client = BarchartDataClient(api_key=API_KEY) if API_KEY else None
 catalog = agricultural_catalog(comparison_only=True)
 catalog_by_root = {item.root: item for item in catalog}
 
@@ -67,8 +76,11 @@ muted = "#AEB9C6"
 
 # %%
 display(catalog_frame())
-print("Data route: Barchart public historical endpoint")
-print("Credentials used: none")
+print(
+    "Data route:",
+    "Barchart OnDemand API" if API_KEY else "permitted local CSV exports",
+)
+print("Credentials used:", "BARCHART_API_KEY" if API_KEY else "none")
 
 # %% [markdown]
 # ## 2. Download the current first-nearby contracts
@@ -85,12 +97,29 @@ failed_rows = []
 for item in catalog:
     shortcut = item.barchart_symbol()
     try:
-        front = client.history(
-            shortcut,
-            start_date=START_DATE,
-            end_date=END_DATE,
-            out="df",
-        )
+        if api_client is not None:
+            front = api_client.market.history(
+                shortcut,
+                start_date=START_DATE,
+                end_date=END_DATE,
+                output="df",
+                method="POST",
+            )
+        else:
+            candidates = [
+                HISTORY_DIR / f"{item.root}.csv",
+                HISTORY_DIR / f"{shortcut.replace('*', 'nearby')}.csv",
+            ]
+            csv_path = next(
+                (candidate for candidate in candidates if candidate.is_file()),
+                None,
+            )
+            if csv_path is None:
+                raise FileNotFoundError(
+                    f"No local Barchart CSV found for {item.root}; "
+                    f"expected {HISTORY_DIR / (item.root + '.csv')}."
+                )
+            front = read_barchart_history_csv(csv_path, symbol=shortcut)
         if front.empty or "close" not in front.columns:
             raise ValueError("empty history or missing close column")
 
@@ -218,7 +247,8 @@ fig.suptitle(
 fig.text(
     0.01,
     0.01,
-    "Source: Barchart public history | *1 first nearby | fixed contracts",
+    "Source: Barchart OnDemand API or permitted CSV exports | "
+    "*1 first nearby | fixed contracts",
     color=muted,
     fontsize=9,
 )

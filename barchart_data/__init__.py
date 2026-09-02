@@ -1,8 +1,8 @@
 """Modern Barchart market-data client.
 
 The authenticated client targets Barchart OnDemand endpoint families. The
-public client reads public quote pages and the current browser-facing history
-route; it does not represent the official API.
+public client reads public quote pages and provides best-effort anonymous
+history access; it does not represent the official API.
 """
 
 from .client import BarchartDataClient, OnDemandClient
@@ -19,6 +19,11 @@ from .exceptions import (
     BarchartDecodeError,
     BarchartPublicPageError,
     BarchartTransportError,
+)
+from .history import (
+    normalize_barchart_history,
+    read_barchart_csv,
+    read_barchart_history_csv,
 )
 from .legacy import PublicWebHistoryClient
 from .normalization import rebase_frame, rebase_many, rebase_to_base
@@ -39,6 +44,7 @@ __all__ = [
     "FundamentalResource",
     "MarketResource",
     "MetadataResource",
+    "normalize_barchart_history",
     "OnDemandClient",
     "PublicWebHistoryClient",
     "PublicBarchartClient",
@@ -48,6 +54,8 @@ __all__ = [
     "rebase_frame",
     "rebase_many",
     "rebase_to_base",
+    "read_barchart_csv",
+    "read_barchart_history_csv",
 ]
 
-__version__ = "0.4.2"
+__version__ = "0.5.0"
