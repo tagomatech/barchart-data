@@ -5,6 +5,7 @@ on:
     paths:
       - "Barchart/**"
       - "barchart_data/**"
+      - "notebooks/**"
       - "tests/**"
       - "pyproject.toml"
       - ".github/workflows/barchart.yml"
@@ -12,6 +13,7 @@ on:
     paths:
       - "Barchart/**"
       - "barchart_data/**"
+      - "notebooks/**"
       - "tests/**"
       - "pyproject.toml"
       - ".github/workflows/barchart.yml"

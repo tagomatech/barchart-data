@@ -24,7 +24,7 @@ ROOT = "https://www.barchart.com"
 API_EOD = f"{ROOT}/proxies/timeseries/historical/queryeod.ashx"
 API_PUBLIC_EOD = f"{ROOT}/proxies/core-api/v1/historical/get"
 DEFAULT_USER_AGENT = (
-    "barchart-data/0.6.0 "
+    "barchart-data/0.7.0 "
     "(+https://github.com/tagomatech/barchart-data)"
 )
 HistoryOutput: TypeAlias = pd.DataFrame | list[dict[str, Any]] | dict[str, Any] | str

@@ -102,23 +102,46 @@ Overview pages are cached for five minutes, while historical responses are
 not cached. Increase the interval for larger jobs and reuse one client
 instance so its cache and pacing apply across the whole job.
 
-## Website CSV downloads
+## Website CSV workflow
 
 Barchart's website provides a permitted manual historical-data download for
 eligible accounts. The package does not automate sign-in or the download
 button. Barchart controls the available history window and daily download
 quota by product; consult its [historical-data help](https://help.barchart.com/support/solutions/articles/242748-how-can-i-download-historical-data-).
-After downloading a CSV, call:
+The workflow helper makes the handoff explicit:
 
 ~~~
-from barchart_data import read_barchart_history_csv
+from barchart_data import BarchartWebsiteWorkflow
 
-history = read_barchart_history_csv("downloads/ZCU26-history.csv", symbol="ZCU26")
+workflow = BarchartWebsiteWorkflow(download_dir="downloads")
+url = workflow.open_historical_download_page("ZCU26")
+print(url)
 ~~~
 
-The importer accepts common website header variants, retains source fields,
-and adds canonical date, open, high, low, close, volume, and openInterest
-fields where available.
+The browser opens the official historical-download page. The user completes
+any account step and presses Download in the normal Barchart UI. No login
+automation, private endpoint, token replay, proxy rotation, or other bypass is
+part of this package. When the file is present locally:
+
+~~~
+imported = workflow.import_latest_csv(symbol="ZCU26")
+history = imported.frame
+print(imported.path)
+print(imported.quality.as_dict())
+~~~
+
+For a browser download started after opening the page, wait_for_csv can watch
+only the local download directory until a stable file appears. The CSV reader
+accepts common website header variants, UTF-8 BOMs, comma/semicolon/tab
+delimiters, thousands separators, and retains source fields while adding
+canonical date, open, high, low, close, volume, and openInterest fields where
+available.
+
+The dedicated demo is
+notebooks/commodities/barchart_csv_workflow_demo.ipynb. It uses ZCU26 and
+shows provenance, data-quality checks, candlesticks, volume, and Screamer
+indicators. Downloaded market data is intentionally not committed to the
+repository.
 
 ## Agricultural catalog and relative comparison
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from os import PathLike
 from typing import IO, Any, TypeAlias
 
@@ -36,11 +37,54 @@ _NUMERIC_COLUMNS = (
 )
 
 
+@dataclass(frozen=True)
+class HistoryQualityReport:
+    """Small, serializable summary of a normalized history frame."""
+
+    rows: int
+    columns: tuple[str, ...]
+    start_date: pd.Timestamp | None
+    end_date: pd.Timestamp | None
+    duplicate_dates: int
+    missing_columns: tuple[str, ...]
+    missing_values: Mapping[str, int]
+
+    @property
+    def is_usable(self) -> bool:
+        """Return whether the frame has complete required fields."""
+
+        return (
+            self.rows > 0
+            and not self.missing_columns
+            and not any(self.missing_values.values())
+        )
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return values suitable for display or JSON serialization."""
+
+        return {
+            "rows": self.rows,
+            "columns": list(self.columns),
+            "start_date": (
+                self.start_date.isoformat() if self.start_date is not None else None
+            ),
+            "end_date": (
+                self.end_date.isoformat() if self.end_date is not None else None
+            ),
+            "duplicate_dates": self.duplicate_dates,
+            "missing_columns": list(self.missing_columns),
+            "missing_values": dict(self.missing_values),
+            "is_usable": self.is_usable,
+        }
+
+
 def read_barchart_history_csv(
     source: HistorySource,
     *,
     symbol: str | None = None,
     sort: bool = True,
+    sep: str | None = None,
+    encoding: str = "utf-8-sig",
 ) -> pd.DataFrame:
     """Read a CSV downloaded from Barchart's historical-data page.
 
@@ -51,12 +95,61 @@ def read_barchart_history_csv(
     """
 
     try:
-        frame = pd.read_csv(source)
+        read_kwargs: dict[str, Any] = {"encoding": encoding}
+        if sep is None:
+            # Python's CSV sniffer handles comma, semicolon, and tab exports.
+            read_kwargs.update(sep=None, engine="python")
+        else:
+            read_kwargs["sep"] = sep
+        frame = pd.read_csv(source, **read_kwargs)
     except (OSError, UnicodeError, pd.errors.ParserError, ValueError) as exc:
         raise BarchartDecodeError(
             f"Could not read Barchart history CSV from {source!r}."
         ) from exc
     return normalize_barchart_history(frame, symbol=symbol, sort=sort)
+
+
+def history_quality_report(
+    frame: pd.DataFrame,
+    *,
+    required_columns: tuple[str, ...] = ("date", "close"),
+) -> HistoryQualityReport:
+    """Summarize completeness and ordering of a normalized history frame.
+
+    The default is the common denominator for Barchart asset classes.
+    Commodity OHLCV notebooks can request the stricter set of fields.
+    """
+
+    if not isinstance(frame, pd.DataFrame):
+        raise TypeError("frame must be a pandas DataFrame")
+
+    missing_columns = tuple(
+        column for column in required_columns if column not in frame.columns
+    )
+    missing_values = {
+        column: int(frame[column].isna().sum())
+        for column in required_columns
+        if column in frame.columns
+    }
+    if "date" in frame.columns and not frame.empty:
+        dates = pd.to_datetime(frame["date"], errors="coerce")
+        start_date = dates.min()
+        end_date = dates.max()
+        duplicate_dates = int(frame["date"].duplicated().sum())
+    else:
+        start_date = None
+        end_date = None
+        duplicate_dates = 0
+
+    return HistoryQualityReport(
+        rows=len(frame),
+        columns=tuple(str(column) for column in frame.columns),
+        start_date=start_date,
+        end_date=end_date,
+        duplicate_dates=duplicate_dates,
+        missing_columns=missing_columns,
+        missing_values=missing_values,
+    )
 
 
 def normalize_barchart_history(
@@ -131,7 +224,7 @@ def normalize_barchart_history(
 
     for column in _NUMERIC_COLUMNS:
         if column in result.columns:
-            result[column] = pd.to_numeric(result[column], errors="coerce")
+            result[column] = _coerce_numeric(result[column])
 
     if not any(
         column in result.columns
@@ -157,11 +250,27 @@ def _normalize_header(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "", text)
 
 
+def _coerce_numeric(values: pd.Series) -> pd.Series:
+    """Convert export values while tolerating thousands separators and blanks."""
+
+    cleaned = values
+    if pd.api.types.is_object_dtype(values) or pd.api.types.is_string_dtype(values):
+        cleaned = (
+            values.astype("string")
+            .str.strip()
+            .str.replace(",", "", regex=False)
+            .replace({"": pd.NA, "-": pd.NA, "--": pd.NA, "N/A": pd.NA})
+        )
+    return pd.to_numeric(cleaned, errors="coerce")
+
+
 read_barchart_csv = read_barchart_history_csv
 
 
 __all__ = [
+    "HistoryQualityReport",
     "HistorySource",
+    "history_quality_report",
     "normalize_barchart_history",
     "read_barchart_csv",
     "read_barchart_history_csv",

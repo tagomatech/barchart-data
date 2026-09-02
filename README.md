@@ -34,8 +34,8 @@ publisher for owner tagomatech, repository barchart-data, workflow
 version tag:
 
 ~~~powershell
-git tag v0.6.0
-git push origin v0.6.0
+git tag v0.7.0
+git push origin v0.7.0
 ~~~
 
 ## Access model
@@ -72,7 +72,7 @@ transient errors. Increase min_request_interval or use a longer page_cache_ttl
 for a longer-lived process. Keep the defaults, or use a longer interval, for
 regular research jobs.
 
-## Website CSV import
+## Website CSV workflow
 
 The website-supported workflow is manual and auditable:
 
@@ -82,17 +82,26 @@ The website-supported workflow is manual and auditable:
 3. Read the downloaded file locally:
 
 ~~~python
-from barchart_data import read_barchart_history_csv
+from barchart_data import BarchartWebsiteWorkflow
 
-history = read_barchart_history_csv(
-    r"downloads\ZCU26-history.csv",
-    symbol="ZCU26",
-)
+workflow = BarchartWebsiteWorkflow(download_dir="downloads")
+url = workflow.open_historical_download_page("ZCU26")
+print(f"Open this page and press Download: {url}")
+
+# Or omit the browser handoff and open the URL yourself.
+imported = workflow.import_latest_csv(symbol="ZCU26")
+history = imported.frame
+print(imported.path)
+print(imported.quality.as_dict())
 ~~~
 
-The importer accepts common Barchart website column names, retains source
-columns, adds canonical date/OHLCV fields, and performs no network or login
-operation.
+The workflow opens only the official page in your browser. You complete any
+account step and press Barchart's Download control yourself. It can then find
+the newest matching local CSV, wait for a browser download to finish, preserve
+source columns, add canonical date/OHLCV fields, and report duplicates and
+missing values. It performs no login, private-endpoint request, or network
+operation during import. The lower-level read_barchart_history_csv function
+remains available when an exact path is preferred.
 
 ## Commodity utilities
 
@@ -109,6 +118,11 @@ The compatibility Barchart package contains:
 
 Open notebooks/commodities/corn_futures_demo.ipynb in Jupyter or VS Code after installing
 the demo extra.
+
+The supported website workflow is demonstrated end to end in
+notebooks/commodities/barchart_csv_workflow_demo.ipynb. It uses the actual
+ZCU26 contract, shows the source-file audit, and renders candlesticks,
+volume, RSI, Bollinger Bands, and ATR after a local CSV download.
 
 The broader agriculture portfolio example is in
 notebooks/commodities/agriculture_portfolio_demo.ipynb. It covers current

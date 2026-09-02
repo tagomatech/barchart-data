@@ -18,6 +18,8 @@ from .exceptions import (
     BarchartTransportError,
 )
 from .history import (
+    HistoryQualityReport,
+    history_quality_report,
     normalize_barchart_history,
     read_barchart_csv,
     read_barchart_history_csv,
@@ -25,6 +27,12 @@ from .history import (
 from .legacy import PublicWebHistoryClient
 from .normalization import rebase_frame, rebase_many, rebase_to_base
 from .public import BarchartPublicClient, PublicBarchartClient, PublicWebClient
+from .website import (
+    BarchartWebsiteWorkflow,
+    ImportedHistory,
+    historical_download_url,
+)
+
 __all__ = [
     "BarchartDataError",
     "BarchartDecodeError",
@@ -33,6 +41,11 @@ __all__ = [
     "BarchartTransportError",
     "AGRICULTURAL_CATALOG",
     "CommodityRoot",
+    "HistoryQualityReport",
+    "ImportedHistory",
+    "BarchartWebsiteWorkflow",
+    "history_quality_report",
+    "historical_download_url",
     "normalize_barchart_history",
     "PublicWebHistoryClient",
     "PublicBarchartClient",
@@ -46,4 +59,4 @@ __all__ = [
     "read_barchart_history_csv",
 ]
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"

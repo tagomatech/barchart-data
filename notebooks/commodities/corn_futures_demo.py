@@ -35,27 +35,32 @@ from IPython.display import display
 from matplotlib.patches import Rectangle
 from screamer import ATR, BollingerBands, RollingMean, RollingRSI
 
-from barchart_data import read_barchart_history_csv
+from barchart_data import BarchartWebsiteWorkflow
 
 CONTRACT = "ZCU26"
 PLOT_SESSIONS = 180
-HISTORY_CSV = Path(
-    "data/ZCU26-history.csv"
-)
+DOWNLOAD_DIR = Path("data")
+OPEN_BROWSER = False
+workflow = BarchartWebsiteWorkflow(download_dir=DOWNLOAD_DIR)
+DOWNLOAD_URL = workflow.historical_download_url(CONTRACT)
 
 # %% [markdown]
 # ## 1. Fetch actual Barchart data
 #
-# Download the permitted CSV manually from Barchart's historical-data page and
-# place it at data/ZCU26-history.csv before running this cell.
+# Download the permitted CSV manually from the official page and place it in
+# the configured data folder before running this cell.
 
 # %%
-if HISTORY_CSV.is_file():
-    history = read_barchart_history_csv(HISTORY_CSV, symbol=CONTRACT)
-else:
+print(f"Official download page: {DOWNLOAD_URL}")
+if OPEN_BROWSER:
+    workflow.open_historical_download_page(CONTRACT)
+try:
+    imported = workflow.import_latest_csv(symbol=CONTRACT)
+except FileNotFoundError as exc:
     raise RuntimeError(
-        f"Place a permitted Barchart CSV at {HISTORY_CSV}."
-    )
+        f"Place a permitted {CONTRACT} CSV in {DOWNLOAD_DIR}."
+    ) from exc
+history = imported.frame
 if history.empty:
     raise ValueError(f"No Barchart rows returned for {CONTRACT}.")
 
