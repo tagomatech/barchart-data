@@ -4,8 +4,8 @@
 # # Agriculture commodity portfolio: grains, oilseeds, livestock, and vegetable oils
 #
 # This notebook uses the maintained Barchart agricultural catalog and the
-# official OnDemand API or permitted local CSV exports. It downloads the
-# current first-nearby contract for each catalog root, preserves the source
+# permitted local CSV exports. It reads the current first-nearby contract for
+# each catalog root, preserves the source
 # contract, and creates transparent rebased price paths.
 #
 # The comparison is not a synthetic continuous futures series. Every line is
@@ -40,7 +40,7 @@ from Barchart import (
     rebase_frame,
     rebase_many,
 )
-from barchart_data import BarchartDataClient, read_barchart_history_csv
+from barchart_data import read_barchart_history_csv
 
 START_DATE = "2024-01-01"
 END_DATE = None
@@ -50,12 +50,10 @@ CATEGORY_WEIGHTS = {
     "livestock": 0.20,
     "vegetable_oils": 0.10,
 }
-API_KEY = os.getenv("BARCHART_API_KEY")
 HISTORY_DIR = Path(
     os.getenv("BARCHART_HISTORY_DIR", "data/barchart_history")
 )
 
-api_client = BarchartDataClient(api_key=API_KEY) if API_KEY else None
 catalog = agricultural_catalog(comparison_only=True)
 catalog_by_root = {item.root: item for item in catalog}
 
@@ -76,11 +74,8 @@ muted = "#AEB9C6"
 
 # %%
 display(catalog_frame())
-print(
-    "Data route:",
-    "Barchart OnDemand API" if API_KEY else "permitted local CSV exports",
-)
-print("Credentials used:", "BARCHART_API_KEY" if API_KEY else "none")
+print("Data route:", "permitted local CSV exports")
+print("Credentials used: none")
 
 # %% [markdown]
 # ## 2. Download the current first-nearby contracts
@@ -97,29 +92,20 @@ failed_rows = []
 for item in catalog:
     shortcut = item.barchart_symbol()
     try:
-        if api_client is not None:
-            front = api_client.market.history(
-                shortcut,
-                start_date=START_DATE,
-                end_date=END_DATE,
-                output="df",
-                method="POST",
+        candidates = [
+            HISTORY_DIR / f"{item.root}.csv",
+            HISTORY_DIR / f"{shortcut.replace('*', 'nearby')}.csv",
+        ]
+        csv_path = next(
+            (candidate for candidate in candidates if candidate.is_file()),
+            None,
+        )
+        if csv_path is None:
+            raise FileNotFoundError(
+                f"No local Barchart CSV found for {item.root}; "
+                f"expected {HISTORY_DIR / (item.root + '.csv')}."
             )
-        else:
-            candidates = [
-                HISTORY_DIR / f"{item.root}.csv",
-                HISTORY_DIR / f"{shortcut.replace('*', 'nearby')}.csv",
-            ]
-            csv_path = next(
-                (candidate for candidate in candidates if candidate.is_file()),
-                None,
-            )
-            if csv_path is None:
-                raise FileNotFoundError(
-                    f"No local Barchart CSV found for {item.root}; "
-                    f"expected {HISTORY_DIR / (item.root + '.csv')}."
-                )
-            front = read_barchart_history_csv(csv_path, symbol=shortcut)
+        front = read_barchart_history_csv(csv_path, symbol=shortcut)
         if front.empty or "close" not in front.columns:
             raise ValueError("empty history or missing close column")
 
@@ -247,7 +233,7 @@ fig.suptitle(
 fig.text(
     0.01,
     0.01,
-    "Source: Barchart OnDemand API or permitted CSV exports | "
+    "Source: permitted Barchart CSV exports | "
     "*1 first nearby | fixed contracts",
     color=muted,
     fontsize=9,

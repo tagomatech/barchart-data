@@ -4,16 +4,14 @@
 # # Equity research: Apple, S&P 500, and a portfolio
 #
 # This notebook demonstrates the equity side of barchart-data using public
-# Barchart pages plus the official historical API or permitted local CSV
-# exports. It uses:
+# Barchart pages plus permitted local CSV exports. It uses:
 #
 # - Apple (AAPL) for a company quote, profile, OHLCV chart, and indicators;
 # - the Barchart S&P 500 index symbol ($SPX) as a benchmark;
 # - an equal-weighted example portfolio of large, liquid equities;
 # - Barchart's dividend-adjusted versus unadjusted history option.
 #
-# Public quote/profile fields do not require a login. Automated historical
-# data uses BARCHART_API_KEY; without a key, use permitted local CSV exports.
+# Public quote/profile fields and local CSV parsing require no login or API key.
 
 # %%
 import os
@@ -47,7 +45,6 @@ from matplotlib.patches import Rectangle
 from screamer import ATR, BollingerBands, RollingMean, RollingRSI
 
 from barchart_data import (
-    BarchartDataClient,
     PublicBarchartClient,
     read_barchart_history_csv,
 )
@@ -64,13 +61,11 @@ PORTFOLIO_WEIGHTS = {
     "JPM": 0.15,
     "XOM": 0.10,
 }
-API_KEY = os.getenv("BARCHART_API_KEY")
 HISTORY_DIR = Path(
     os.getenv("BARCHART_HISTORY_DIR", "data/barchart_history")
 )
 
 public_client = PublicBarchartClient()
-history_client = BarchartDataClient(api_key=API_KEY) if API_KEY else None
 
 # %% [markdown]
 # ## 1. Quote, company profile, and main metrics
@@ -101,11 +96,9 @@ display(profile.T.rename(columns={0: "value"}))
 
 print(
     "Data route:",
-    "Barchart public pages plus OnDemand API"
-    if API_KEY
-    else "Barchart public pages plus permitted local CSV exports",
+    "Barchart public pages plus permitted local CSV exports",
 )
-print("Credentials used:", "BARCHART_API_KEY" if API_KEY else "none")
+print("Credentials used: none")
 
 # %% [markdown]
 # ## 2. Historical price data and Screamer indicators
@@ -117,30 +110,20 @@ print("Credentials used:", "BARCHART_API_KEY" if API_KEY else "none")
 
 # %%
 def fetch_history(symbol, *, dividends):
-    if history_client is not None:
-        frame = history_client.market.history(
-            symbol,
-            start_date=START_DATE,
-            end_date=END_DATE,
-            output="df",
-            method="POST",
-            dividends=dividends,
+    safe_symbol = symbol.replace("$", "index_").replace("*", "nearby")
+    candidates = [HISTORY_DIR / f"{safe_symbol}-{dividends}.csv"]
+    if dividends == "false":
+        candidates.append(HISTORY_DIR / f"{safe_symbol}.csv")
+    csv_path = next(
+        (candidate for candidate in candidates if candidate.is_file()),
+        None,
+    )
+    if csv_path is None:
+        raise FileNotFoundError(
+            f"No local Barchart CSV found for {symbol}; "
+            f"expected {HISTORY_DIR / (safe_symbol + '.csv')}."
         )
-    else:
-        safe_symbol = symbol.replace("$", "index_").replace("*", "nearby")
-        candidates = [HISTORY_DIR / f"{safe_symbol}-{dividends}.csv"]
-        if dividends == "false":
-            candidates.append(HISTORY_DIR / f"{safe_symbol}.csv")
-        csv_path = next(
-            (candidate for candidate in candidates if candidate.is_file()),
-            None,
-        )
-        if csv_path is None:
-            raise FileNotFoundError(
-                f"No local Barchart CSV found for {symbol}; "
-                f"expected {HISTORY_DIR / (safe_symbol + '.csv')}."
-            )
-        frame = read_barchart_history_csv(csv_path, symbol=symbol)
+    frame = read_barchart_history_csv(csv_path, symbol=symbol)
     if frame.empty:
         raise ValueError(f"No historical rows returned for {symbol}.")
 
@@ -308,7 +291,7 @@ axes[2].xaxis.set_major_formatter(mdates.DateFormatter("%b\n%Y"))
 fig.text(
     0.01,
     0.01,
-    "Source: Barchart OnDemand API or permitted CSV exports | "
+    "Source: permitted Barchart CSV exports | "
     "Screamer indicators",
     color=muted,
     fontsize=9,
@@ -319,10 +302,8 @@ plt.show()
 # %% [markdown]
 # ## 4. Dividend-adjusted versus unadjusted prices
 #
-# The official Barchart history API exposes a dividends option that changes
-# the historical price series for dividend and split adjustment. A website
-# CSV must be downloaded with the desired adjustment setting. Neither workflow
-# returns a cash dividend event ledger in this demo.
+# A website CSV must be downloaded with the desired adjustment setting.
+# Neither workflow returns a cash dividend event ledger in this demo.
 
 # %%
 dividend_effect = apple_raw[["date", "close"]].rename(
@@ -503,11 +484,11 @@ plt.show()
 # This notebook demonstrates a useful equity workflow:
 #
 # 1. Read page-level company metadata and quote fields.
-# 2. Read and validate official API or website-exported OHLCV data.
+# 2. Read and validate website-exported OHLCV data.
 # 3. Apply causal Screamer indicators.
 # 4. Compare dividend-adjusted and unadjusted price histories.
 # 5. Calculate transparent performance and risk metrics.
 # 6. Build a reproducible, re-based portfolio comparison.
 #
-# Official Barchart OnDemand endpoints remain the appropriate route for
-# licensed fundamentals, cash dividend ledgers, and broader API coverage.
+# The public page adapter and CSV importer deliberately avoid credentials and
+# do not attempt to retrieve restricted account-level data.

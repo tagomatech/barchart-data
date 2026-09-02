@@ -97,7 +97,7 @@ class PublicBarchartClientTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             BarchartPublicClient(page_cache_ttl=-1)
 
-    def test_quote_decodes_public_page_without_api_key(self):
+    def test_quote_decodes_public_page_without_credentials(self):
         session = FakeSession(
             FakeResponse(
                 page_html(
@@ -121,7 +121,6 @@ class PublicBarchartClientTests(unittest.TestCase):
         self.assertEqual(result.loc[0, "symbol"], "ZCU26")
         self.assertEqual(result.loc[0, "close"], 483.75)
         self.assertEqual(result.loc[0, "instrument_name"], "Corn Futures")
-        self.assertNotIn("apikey", session.calls[0][1])
         self.assertEqual(
             session.calls[0][0],
             "https://www.barchart.com/futures/quotes/ZCU26/overview",
@@ -181,7 +180,6 @@ class PublicBarchartClientTests(unittest.TestCase):
         self.assertEqual(result.loc[0, "close"], 483.75)
         self.assertEqual(result.loc[0, "openInterest"], 20)
         self.assertIn("/proxies/core-api/v1/historical/get", session.calls[0][0])
-        self.assertNotIn("apikey", session.calls[0][1]["params"])
         self.assertEqual(
             session.calls[0][1]["headers"]["Referer"],
             "https://www.barchart.com/futures/quotes/ZCU26/overview",
@@ -195,7 +193,7 @@ class PublicBarchartClientTests(unittest.TestCase):
             client.history("AAPL", asset_class="stocks")
 
         self.assertEqual(context.exception.status_code, 403)
-        self.assertIn("session or OnDemand API key", str(context.exception))
+        self.assertIn("Barchart account or subscription", str(context.exception))
 
     def test_rejects_path_injection(self):
         client = BarchartPublicClient(session=FakeSession(FakeResponse("")))

@@ -21,11 +21,9 @@ python -m pip install -e '.[demo]'
 
 The package is split into three replaceable layers:
 
-- **Client**: BarchartClient remains the legacy web-session client for
-  compatibility. PublicBarchartClient uses Barchart's public-page
-  quote/profile feed and a best-effort anonymous history route. The preferred
-  historical path is the documented OnDemand client or a locally downloaded
-  website CSV.
+- **Client**: PublicBarchartClient uses Barchart's public-page quote/profile
+  feed and a best-effort anonymous history route. The local CSV importer is
+  the reliable historical-data path when Barchart permits the download.
 - **Fetcher**: BaseFetcher is a small protocol. BarchartFetcher adapts the
   client to the builder and leaves rate limiting/configuration at the boundary.
 - **Builder**: ContinuousFuturesBuilder handles contract cycles, date
@@ -93,14 +91,11 @@ the requested window. Anonymous history is subject to Barchart's access
 controls; a 401/403 is reported as BarchartPublicPageError and is not retried
 through an undocumented authentication bypass.
 
-The legacy client uses Barchart's web-session cookie handshake and endpoint.
-The public client uses the current public-page route without storing
-credentials. Both are subject to Barchart availability and the access terms
-that apply to your use of the service. For guaranteed historical API access,
-use the official OnDemand client with an API key. Its getHistory response is
-normalized with a stable date field. Dates passed to that client are converted
-to Barchart's documented compact format. A POST request is available when the
-API key should not appear in the query string.
+The legacy client uses Barchart's public web-session handshake and endpoint.
+The public client uses public-page routes without storing credentials. Both
+are subject to Barchart availability and the access terms that apply to your
+use of the service. A 401/403 from anonymous history is surfaced; the package
+does not retry through authentication or another undocumented route.
 
 Public requests are deliberately paced at one second apart per client.
 Overview pages are cached for five minutes, while historical responses are
@@ -121,9 +116,9 @@ from barchart_data import read_barchart_history_csv
 history = read_barchart_history_csv("downloads/ZCU26-history.csv", symbol="ZCU26")
 ~~~
 
-The importer accepts website/API header variants, retains source fields, and
-adds canonical date, open, high, low, close, volume, and openInterest fields
-where available.
+The importer accepts common website header variants, retains source fields,
+and adds canonical date, open, high, low, close, volume, and openInterest
+fields where available.
 
 ## Agricultural catalog and relative comparison
 

@@ -1,4 +1,4 @@
-"""Normalize historical data returned or downloaded from Barchart."""
+"""Normalize historical CSV data downloaded from Barchart."""
 
 from __future__ import annotations
 
@@ -45,9 +45,9 @@ def read_barchart_history_csv(
     """Read a CSV downloaded from Barchart's historical-data page.
 
     This function is intentionally a local-file importer. It does not log in,
-    automate a browser, or call a private Barchart endpoint. It accepts the
-    CSV layouts used by Barchart's website and OnDemand API, keeps the source
-    columns, and adds stable date/OHLCV column names for downstream code.
+    automate a browser, or make any network request. It accepts common CSV
+    layouts used by Barchart's website, keeps source columns, and adds stable
+    date/OHLCV column names for downstream code.
     """
 
     try:

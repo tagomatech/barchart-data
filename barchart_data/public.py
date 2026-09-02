@@ -1,8 +1,8 @@
 """No-login access to data embedded in public Barchart quote pages.
 
 This adapter reads the JSON block that Barchart publishes in quote-page HTML.
-It is intentionally separate from the authenticated OnDemand client because
-the public page feed is smaller, may be delayed, and can change independently.
+The public page feed is smaller, may be delayed, and can change independently
+from Barchart's account-level products.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from .exceptions import (
 PUBLIC_ROOT = "https://www.barchart.com"
 INLINE_DATA_ID = "barchart-www-inline-data"
 DEFAULT_USER_AGENT = (
-    "barchart-data/0.5.0 "
+    "barchart-data/0.6.0 "
     "(+https://github.com/tagomatech/barchart-data)"
 )
 DEFAULT_MIN_REQUEST_INTERVAL = 1.0
@@ -56,7 +56,7 @@ class PublicBarchartClient:
 
     The client uses public overview pages such as
     /futures/quotes/ZCU26/overview. It does not bypass authentication or call
-    undocumented authenticated endpoints.
+    account-only or undocumented endpoints.
     """
 
     def __init__(
@@ -379,7 +379,7 @@ class PublicBarchartClient:
                     f"Barchart denied anonymous historical data for {symbol} "
                     f"(HTTP {status_code}). Quote/profile pages are public, "
                     "but this history route may require a Barchart session "
-                    "or OnDemand API key."
+                    "or an eligible Barchart account or subscription."
                 )
             else:
                 message = (

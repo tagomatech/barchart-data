@@ -1,11 +1,10 @@
-"""Modern Barchart market-data client.
+"""Credential-free Barchart market-data and analysis utilities.
 
-The authenticated client targets Barchart OnDemand endpoint families. The
-public client reads public quote pages and provides best-effort anonymous
-history access; it does not represent the official API.
+The public client reads data exposed by Barchart quote pages without an API
+key or login. Historical CSV files downloaded through Barchart can be parsed
+locally with the history helpers.
 """
 
-from .client import BarchartDataClient, OnDemandClient
 from .catalog import (
     AGRICULTURAL_CATALOG,
     CommodityRoot,
@@ -13,8 +12,6 @@ from .catalog import (
     catalog_frame,
 )
 from .exceptions import (
-    BarchartAPIError,
-    BarchartAuthenticationError,
     BarchartDataError,
     BarchartDecodeError,
     BarchartPublicPageError,
@@ -28,12 +25,7 @@ from .history import (
 from .legacy import PublicWebHistoryClient
 from .normalization import rebase_frame, rebase_many, rebase_to_base
 from .public import BarchartPublicClient, PublicBarchartClient, PublicWebClient
-from .resources import FundamentalResource, MarketResource, MetadataResource
-
 __all__ = [
-    "BarchartAPIError",
-    "BarchartAuthenticationError",
-    "BarchartDataClient",
     "BarchartDataError",
     "BarchartDecodeError",
     "BarchartPublicClient",
@@ -41,11 +33,7 @@ __all__ = [
     "BarchartTransportError",
     "AGRICULTURAL_CATALOG",
     "CommodityRoot",
-    "FundamentalResource",
-    "MarketResource",
-    "MetadataResource",
     "normalize_barchart_history",
-    "OnDemandClient",
     "PublicWebHistoryClient",
     "PublicBarchartClient",
     "PublicWebClient",
@@ -58,4 +46,4 @@ __all__ = [
     "read_barchart_history_csv",
 ]
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"

@@ -1,11 +1,12 @@
 # barchart-data
 
-An installable Python toolkit for Barchart market data, with a no-login public
-page adapter, an official authenticated OnDemand client, and a parser for
-historical CSV files downloaded through the Barchart website.
+An installable Python toolkit for Barchart market data that requires no
+Barchart API key or login. It reads public quote pages and parses historical
+CSV files downloaded through the Barchart website.
 
-The package is designed for commodity research first, while keeping the
-resource layout extensible to equities, funds, currencies, and fundamentals.
+The package is designed for commodity research first, while keeping its public
+asset-class handling extensible to equities, funds, currencies, and other
+instruments.
 
 ## Install from GitHub
 
@@ -33,8 +34,8 @@ publisher for owner tagomatech, repository barchart-data, workflow
 version tag:
 
 ~~~powershell
-git tag v0.5.0
-git push origin v0.5.0
+git tag v0.6.0
+git push origin v0.6.0
 ~~~
 
 ## Access model
@@ -60,8 +61,8 @@ The public adapter is reliable for quote/profile fields embedded in public
 overview pages. Its historical method is deliberately best-effort because
 Barchart can deny anonymous automated history requests with HTTP 401/403.
 The library does not bypass those controls, automate sign-in, or rotate IPs.
-For historical data, use the official OnDemand client or download a CSV from
-the Barchart historical-data page using an account and plan that permits it.
+For reliable historical data, download a CSV from the Barchart historical-data
+page using an account and plan that permits it.
 The available lookback window and download quota depend on the Barchart
 product and can change; see the [official download help](https://help.barchart.com/support/solutions/articles/242748-how-can-i-download-historical-data-).
 
@@ -70,37 +71,6 @@ for five minutes, and honors Barchart's Retry-After response when retrying
 transient errors. Increase min_request_interval or use a longer page_cache_ttl
 for a longer-lived process. Keep the defaults, or use a longer interval, for
 regular research jobs.
-
-## Official historical API
-
-The authenticated client is available when official API coverage is required.
-Set BARCHART_API_KEY or pass an explicit key:
-
-~~~python
-from barchart_data import BarchartDataClient
-
-client = BarchartDataClient()
-corn = client.market.history(
-    "ZC*1",
-    frequency="dailyNearest",
-    start_date="2024-01-01",
-    end_date="2026-01-01",
-    method="POST",
-)
-quotes = client.market.quote(["ZC*1", "AAPL"])
-quarterly_balance_sheet = client.fundamentals.balance_sheets(
-    "AAPL",
-    frequency="Quarter",
-)
-~~~
-
-The OnDemand client is optional; importing and using the public client does
-not read or require BARCHART_API_KEY.
-
-The official getHistory API accepts futures, equities, indexes, and other
-supported instruments. Dates are normalized to Barchart's documented
-YYYYMMDD or YYYYMMDDHHMMSS format, and DataFrame results include a stable
-date column even when the API returns tradingDay.
 
 ## Website CSV import
 
@@ -120,9 +90,9 @@ history = read_barchart_history_csv(
 )
 ~~~
 
-The importer accepts common Barchart website and API column names, retains
-source columns, adds canonical date/OHLCV fields, and performs no network or
-login operation.
+The importer accepts common Barchart website column names, retains source
+columns, adds canonical date/OHLCV fields, and performs no network or login
+operation.
 
 ## Commodity utilities
 
@@ -147,9 +117,8 @@ ICE Canada, and Euronext Matif, plus rebased market-group comparisons.
 
 The equity research example is in
 notebooks/equities/equity_research_demo.ipynb. It covers public AAPL page
-fields, official historical API or local CSV history, the Barchart S&P 500
-index, dividend-adjustment effects, Screamer indicators, risk metrics, and a
-small example portfolio.
+fields, local CSV history, the Barchart S&P 500 index, dividend-adjustment
+effects, Screamer indicators, risk metrics, and a small example portfolio.
 
 ## Tests
 
