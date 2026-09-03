@@ -45,15 +45,23 @@ workflow = BarchartWebsiteWorkflow(download_dir=DOWNLOAD_DIR)
 DOWNLOAD_URL = workflow.historical_download_url(CONTRACT)
 
 # %% [markdown]
-# ## 1. Fetch actual Barchart data
+# ## 1. Source page
 #
-# Download the permitted CSV manually from the official page and place it in
-# the configured data folder before running this cell.
+# The default is False so re-running this notebook does not open a browser
+# unexpectedly. Set OPEN_BROWSER to True to open the official page.
 
 # %%
 print(f"Official download page: {DOWNLOAD_URL}")
 if OPEN_BROWSER:
     workflow.open_historical_download_page(CONTRACT)
+
+# %% [markdown]
+# ## 2. Fetch actual Barchart data
+#
+# Download the permitted CSV manually from the official page and place it in
+# the configured data folder before running this cell.
+
+# %%
 try:
     imported = workflow.import_latest_csv(symbol=CONTRACT)
 except FileNotFoundError as exc:

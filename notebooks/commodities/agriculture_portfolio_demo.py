@@ -40,7 +40,7 @@ from Barchart import (
     rebase_frame,
     rebase_many,
 )
-from barchart_data import read_barchart_history_csv
+from barchart_data import BarchartWebsiteWorkflow
 
 START_DATE = "2024-01-01"
 END_DATE = None
@@ -53,6 +53,7 @@ CATEGORY_WEIGHTS = {
 HISTORY_DIR = Path(
     os.getenv("BARCHART_HISTORY_DIR", "data/barchart_history")
 )
+history_workflow = BarchartWebsiteWorkflow(download_dir=HISTORY_DIR)
 
 catalog = agricultural_catalog(comparison_only=True)
 catalog_by_root = {item.root: item for item in catalog}
@@ -76,6 +77,7 @@ muted = "#AEB9C6"
 display(catalog_frame())
 print("Data route:", "permitted local CSV exports")
 print("Credentials used: none")
+print("Notebook status: catalog is ready; add local CSVs to run the charts.")
 
 # %% [markdown]
 # ## 2. Download the current first-nearby contracts
@@ -105,7 +107,10 @@ for item in catalog:
                 f"No local Barchart CSV found for {item.root}; "
                 f"expected {HISTORY_DIR / (item.root + '.csv')}."
             )
-        front = read_barchart_history_csv(csv_path, symbol=shortcut)
+        front = history_workflow.import_csv(
+            csv_path,
+            symbol=shortcut,
+        ).frame
         if front.empty or "close" not in front.columns:
             raise ValueError("empty history or missing close column")
 

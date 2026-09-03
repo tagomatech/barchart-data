@@ -7,12 +7,10 @@ contract-symbol rules, data fetching, and continuous-series construction.
 from __future__ import annotations
 
 import logging
-import random
 import re
-import time
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Callable, Protocol, TypeAlias, runtime_checkable
+from typing import Any, Protocol, TypeAlias, runtime_checkable
 
 import pandas as pd
 
@@ -172,74 +170,6 @@ class BaseFetcher(Protocol):
         end: str | None,
     ) -> pd.DataFrame:
         """Return a contract history containing a date-like column."""
-
-
-class BarchartFetcher:
-    """Adapt a Barchart history client to the builder fetcher protocol."""
-
-    def __init__(
-        self,
-        client: Any,
-        *,
-        data: str = "daily",
-        maxrecords: int = 640,
-        order: str = "asc",
-        out: str = "df",
-        min_delay_seconds: float = 2.0,
-        max_delay_seconds: float = 5.5,
-        sleep: Callable[[float], None] = time.sleep,
-        random_source: random.Random | None = None,
-        logger: logging.Logger | None = None,
-    ) -> None:
-        if maxrecords < 1:
-            raise ValueError("maxrecords must be >= 1")
-        if min_delay_seconds < 0:
-            raise ValueError("min_delay_seconds must be >= 0")
-        if max_delay_seconds < min_delay_seconds:
-            raise ValueError("max_delay_seconds must be >= min_delay_seconds")
-        if out != "df":
-            raise ValueError("BarchartFetcher requires out='df'")
-        self.client = client
-        self.data = data
-        self.maxrecords = maxrecords
-        self.order = order
-        self.out = out
-        self.min_delay_seconds = min_delay_seconds
-        self.max_delay_seconds = max_delay_seconds
-        self.sleep = sleep
-        self.random_source = random_source or random.Random()
-        self.logger = logger or logging.getLogger(__name__)
-
-    def fetch_one(
-        self,
-        symbol: str,
-        start: str | None,
-        end: str | None,
-    ) -> pd.DataFrame:
-        delay = self.random_source.uniform(
-            self.min_delay_seconds,
-            self.max_delay_seconds,
-        )
-        if delay > 0:
-            self.sleep(delay)
-
-        try:
-            result = self.client.history(
-                symbol=symbol,
-                data=self.data,
-                maxrecords=self.maxrecords,
-                order=self.order,
-                out=self.out,
-                startDate=start,
-                endDate=end,
-            )
-        except Exception as exc:
-            raise FuturesDataError(
-                f"Failed to fetch contract history for {symbol}: {exc}"
-            ) from exc
-        if not isinstance(result, pd.DataFrame):
-            raise TypeError("BarchartFetcher requires the client's out='df' result")
-        return result
 
 
 @dataclass(frozen=True)

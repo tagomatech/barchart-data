@@ -24,7 +24,6 @@ from .history import (
     read_barchart_csv,
     read_barchart_history_csv,
 )
-from .legacy import PublicWebHistoryClient
 from .normalization import rebase_frame, rebase_many, rebase_to_base
 from .public import BarchartPublicClient, PublicBarchartClient, PublicWebClient
 from .website import (
@@ -47,7 +46,6 @@ __all__ = [
     "history_quality_report",
     "historical_download_url",
     "normalize_barchart_history",
-    "PublicWebHistoryClient",
     "PublicBarchartClient",
     "PublicWebClient",
     "agricultural_catalog",
@@ -59,4 +57,4 @@ __all__ = [
     "read_barchart_history_csv",
 ]
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"

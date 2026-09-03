@@ -34,8 +34,8 @@ publisher for owner tagomatech, repository barchart-data, workflow
 version tag:
 
 ~~~powershell
-git tag v0.7.0
-git push origin v0.7.0
+git tag v0.8.0
+git push origin v0.8.0
 ~~~
 
 ## Access model
@@ -45,24 +45,18 @@ overview pages. Quotes and profiles do not require a Barchart account, API
 key, or login.
 
 ~~~python
-from barchart_data import BarchartPublicPageError, PublicBarchartClient
+from barchart_data import PublicBarchartClient
 
 client = PublicBarchartClient()
 corn_quote = client.quote("ZCU26")
 corn_profile = client.profile("ZCU26")
-try:
-    corn_history = client.history("ZCU26", start_date="2026-06-01")
-except BarchartPublicPageError:
-    # Anonymous historical access is best-effort and may be denied.
-    corn_history = None
 ~~~
 
-The public adapter is reliable for quote/profile fields embedded in public
-overview pages. Its historical method is deliberately best-effort because
-Barchart can deny anonymous automated history requests with HTTP 401/403.
-The library does not bypass those controls, automate sign-in, or rotate IPs.
-For reliable historical data, download a CSV from the Barchart historical-data
-page using an account and plan that permits it.
+The public adapter is limited to quote/profile fields embedded in public
+overview pages. Historical data is deliberately not fetched through an
+anonymous automated endpoint because Barchart can deny that route with HTTP
+401/403. For historical data, download a CSV from the Barchart
+historical-data page using an account and plan that permits it.
 The available lookback window and download quota depend on the Barchart
 product and can change; see the [official download help](https://help.barchart.com/support/solutions/articles/242748-how-can-i-download-historical-data-).
 
@@ -107,7 +101,7 @@ remains available when an exact path is preferred.
 
 The compatibility Barchart package contains:
 
-- a typed best-effort public quote/history adapter for futures;
+- a typed public quote/profile adapter for overview pages;
 - a supported local importer for Barchart historical CSV downloads;
 - contract-aware continuous-series construction with auditable roll segments;
 - a catalog of grains, oilseeds, livestock, ICE Canada, Euronext Matif, and
@@ -137,7 +131,6 @@ effects, Screamer indicators, risk metrics, and a small example portfolio.
 ## Tests
 
 ~~~powershell
-python -m unittest discover -s Barchart/tests -v
 python -m unittest discover -s tests -v
 ~~~
 

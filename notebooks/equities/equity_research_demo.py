@@ -45,8 +45,8 @@ from matplotlib.patches import Rectangle
 from screamer import ATR, BollingerBands, RollingMean, RollingRSI
 
 from barchart_data import (
+    BarchartWebsiteWorkflow,
     PublicBarchartClient,
-    read_barchart_history_csv,
 )
 
 EQUITY = "AAPL"
@@ -65,6 +65,7 @@ HISTORY_DIR = Path(
     os.getenv("BARCHART_HISTORY_DIR", "data/barchart_history")
 )
 
+history_workflow = BarchartWebsiteWorkflow(download_dir=HISTORY_DIR)
 public_client = PublicBarchartClient()
 
 # %% [markdown]
@@ -74,6 +75,10 @@ public_client = PublicBarchartClient()
 # the quote page. For example, the latest page may expose previousClose rather
 # than an intraday last price when the market is closed. The notebook keeps
 # that distinction visible.
+
+# %%
+print("Data route: public quote/profile pages plus permitted local CSV exports")
+print("Notebook status: metadata can be loaded now; add local CSVs for analysis.")
 
 # %%
 quote = public_client.quote(EQUITY, asset_class="stocks")
@@ -94,10 +99,6 @@ quote_view = quote[[column for column in quote_columns if column in quote.column
 display(quote_view.T.rename(columns={0: "value"}))
 display(profile.T.rename(columns={0: "value"}))
 
-print(
-    "Data route:",
-    "Barchart public pages plus permitted local CSV exports",
-)
 print("Credentials used: none")
 
 # %% [markdown]
@@ -123,7 +124,7 @@ def fetch_history(symbol, *, dividends):
             f"No local Barchart CSV found for {symbol}; "
             f"expected {HISTORY_DIR / (safe_symbol + '.csv')}."
         )
-    frame = read_barchart_history_csv(csv_path, symbol=symbol)
+    frame = history_workflow.import_csv(csv_path, symbol=symbol).frame
     if frame.empty:
         raise ValueError(f"No historical rows returned for {symbol}.")
 

@@ -21,11 +21,10 @@ python -m pip install -e '.[demo]'
 
 The package is split into three replaceable layers:
 
-- **Client**: PublicBarchartClient uses Barchart's public-page quote/profile
-  feed and a best-effort anonymous history route. The local CSV importer is
-  the reliable historical-data path when Barchart permits the download.
-- **Fetcher**: BaseFetcher is a small protocol. BarchartFetcher adapts the
-  client to the builder and leaves rate limiting/configuration at the boundary.
+- **Public page reader**: PublicBarchartClient reads quote/profile fields
+  embedded in public overview pages.
+- **Local history**: BarchartWebsiteWorkflow imports the permitted CSV export
+  and reports its provenance and quality.
 - **Builder**: ContinuousFuturesBuilder handles contract cycles, date
   normalization, nearby selection, duplicate removal, and roll-segment output.
 
@@ -41,26 +40,25 @@ Install the complete project from the repository root:
 python -m pip install -e .
 ~~~
 
-The legacy imports remain available:
+The deterministic compatibility imports remain available:
 
 ~~~
-from Barchart import BarchartClient
+from Barchart import ContinuousFuturesBuilder
 ~~~
 
 ## Example
 
 ~~~
-from Barchart import BarchartClient, BarchartFetcher, ContinuousFuturesBuilder
+from Barchart import ContinuousFuturesBuilder
 
-client = BarchartClient()
-fetcher = BarchartFetcher(client)
-builder = ContinuousFuturesBuilder(fetcher=fetcher, verbose=False)
+builder = ContinuousFuturesBuilder(verbose=False)
 
-series, rolls = builder.build_from_root(
-    "ZC",
+series, rolls = builder.build(
+    {
+        "ZCZ26": corn_history,
+        "ZCH27": next_corn_history,
+    },
     line_number=1,
-    start="2024-01-01",
-    end="2024-12-31",
     return_segments=True,
 )
 ~~~
@@ -85,17 +83,10 @@ comparisons, not continuous futures.
 Install the project demo extra before running the notebook. Screamer requires
 Python 3.11 or newer.
 
-The public client applies the requested inclusive start and end dates after
-decoding the response, because the upstream endpoint can return rows outside
-the requested window. Anonymous history is subject to Barchart's access
-controls; a 401/403 is reported as BarchartPublicPageError and is not retried
-through an undocumented authentication bypass.
-
-The legacy client uses Barchart's public web-session handshake and endpoint.
-The public client uses public-page routes without storing credentials. Both
-are subject to Barchart availability and the access terms that apply to your
-use of the service. A 401/403 from anonymous history is surfaced; the package
-does not retry through authentication or another undocumented route.
+The public page reader only accesses quote/profile overview pages. Historical
+data enters through the user-led CSV export workflow. The package does not
+retry through an undocumented endpoint, automate authentication, or bypass
+Barchart access controls.
 
 Public requests are deliberately paced at one second apart per client.
 Overview pages are cached for five minutes, while historical responses are
@@ -180,7 +171,7 @@ reference, rather than a direct Ringgit FCPO quote.
 ## Tests
 
 ~~~
-python -m unittest discover -s Barchart/tests -v
+python -m unittest discover -s tests -v
 ~~~
 
 The CI workflow runs the same suite across supported Python versions.

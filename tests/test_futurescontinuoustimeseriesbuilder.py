@@ -6,7 +6,6 @@ import pandas as pd
 
 from Barchart.futurescontinuoustimeseriesbuilder import (
     DEFAULT_ROOT_CYCLES,
-    BarchartFetcher,
     ContractCycle,
     ContinuousFuturesBuilder,
     canonical_symbol,
@@ -40,31 +39,6 @@ class FuturesBuilderTests(unittest.TestCase):
             pd.Timestamp("2025-07-15"),
         )
         self.assertEqual(ladder, ["KCK25", "KCN25"])
-
-    def test_fetcher_can_be_used_without_sleeping(self):
-        client = Mock()
-        client.history.return_value = contract_frame(["2025-01-02"], [100])
-        sleep = Mock()
-        fetcher = BarchartFetcher(
-            client,
-            min_delay_seconds=0,
-            max_delay_seconds=0,
-            sleep=sleep,
-        )
-
-        result = fetcher.fetch_one("KCZ25", "2025-01-01", "2025-01-31")
-
-        self.assertEqual(result.loc[0, "last"], 100)
-        sleep.assert_not_called()
-        client.history.assert_called_once_with(
-            symbol="KCZ25",
-            data="daily",
-            maxrecords=640,
-            order="asc",
-            out="df",
-            startDate="2025-01-01",
-            endDate="2025-01-31",
-        )
 
     def test_last_is_retained_and_used_as_close(self):
         builder = ContinuousFuturesBuilder(verbose=False)
