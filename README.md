@@ -28,6 +28,9 @@ history response that the page naturally requests. No browser window is
 displayed. The response is normalized in memory and the browser is closed
 automatically.
 
+The default uses Playwright's Chromium channel, which explicitly selects
+Chrome's newer headless implementation rather than the legacy headless shell.
+
 ~~~python
 from barchart_data import download_history
 

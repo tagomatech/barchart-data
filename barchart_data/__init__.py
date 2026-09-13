@@ -67,4 +67,4 @@ __all__ = [
     "rebase_to_base",
 ]
 
-__version__ = "0.9.4"
+__version__ = "0.9.5"

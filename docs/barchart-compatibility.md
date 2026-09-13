@@ -30,6 +30,9 @@ control, create a download directory, or retain a browser artifact. It uses
 the chart's default range and interval. Browser configuration is limited to
 the optional executable path, headless setting, and timeout:
 
+By default it launches Playwright's Chromium channel, which explicitly selects
+the newer headless implementation instead of the legacy headless shell.
+
 ~~~python
 imported = download_history(
     "ZCU26",

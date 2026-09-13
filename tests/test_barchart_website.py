@@ -171,6 +171,7 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
         self.assertEqual(imported.frame.loc[0, "close"], 484)
         self.assertTrue(browser.closed)
         self.assertTrue(chromium.launch_kwargs["headless"])
+        self.assertEqual(chromium.launch_kwargs["channel"], "chromium")
         self.assertTrue(any("History captured" in line for line in logs.output))
 
     def test_download_history_rejects_invalid_verbosity(self):

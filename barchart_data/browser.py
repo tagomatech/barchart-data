@@ -9,11 +9,8 @@ page itself produces.
 from __future__ import annotations
 
 import logging
-import shutil
 import time
 from dataclasses import dataclass
-from os import environ
-from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
 
@@ -212,13 +209,17 @@ class BarchartInteractiveChartWorkflow:
 
         with sync_playwright() as playwright:
             launch_kwargs: dict[str, Any] = {"headless": self.headless}
-            executable = self.browser_executable or _installed_chrome()
-            if executable:
-                launch_kwargs["executable_path"] = executable
-                logger.debug("Using installed browser executable")
+            if self.browser_executable:
+                launch_kwargs["executable_path"] = self.browser_executable
+                logger.debug("Using configured browser executable")
             else:
-                logger.debug("Using Playwright-managed Chromium")
-            logger.info("Starting browser session")
+                launch_kwargs["channel"] = "chromium"
+                logger.debug("Using Playwright Chromium channel (new headless mode)")
+            logger.info(
+                "Starting browser session: headless=%s mode=%s",
+                self.headless,
+                "new" if not self.browser_executable else "configured executable",
+            )
             try:
                 browser = playwright.chromium.launch(**launch_kwargs)
             except Exception as exc:
@@ -404,36 +405,6 @@ def _safe_page_text(page: Any) -> str:
         return page.locator("body").inner_text(timeout=1000)
     except Exception:  # noqa: BLE001 - page text is best-effort diagnostics
         return ""
-
-
-def _installed_chrome() -> str | None:
-    """Find a normal installed Chrome binary without inspecting its profile."""
-
-    windows_candidates = (
-        Path(environ.get("PROGRAMFILES", ""))
-        / "Google"
-        / "Chrome"
-        / "Application"
-        / "chrome.exe",
-        Path(environ.get("PROGRAMFILES(X86)", ""))
-        / "Google"
-        / "Chrome"
-        / "Application"
-        / "chrome.exe",
-        Path(environ.get("LOCALAPPDATA", ""))
-        / "Google"
-        / "Chrome"
-        / "Application"
-        / "chrome.exe",
-    )
-    for candidate in windows_candidates:
-        if candidate.is_file():
-            return str(candidate)
-    for command in ("google-chrome", "google-chrome-stable", "chrome"):
-        executable = shutil.which(command)
-        if executable:
-            return executable
-    return None
 
 
 def _try_decode_chart_response(
