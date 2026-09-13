@@ -8,6 +8,7 @@ page itself produces.
 
 from __future__ import annotations
 
+import logging
 import shutil
 import time
 from dataclasses import dataclass
@@ -30,6 +31,35 @@ from .website import (
     _validated_base_url,
     _validated_segment,
 )
+
+_LOGGER = logging.getLogger(__name__)
+_VERBOSITY_LEVELS = {
+    0: logging.CRITICAL + 1,
+    1: logging.ERROR,
+    2: logging.INFO,
+    3: logging.DEBUG,
+}
+
+
+def _configure_logging(verbosity: int) -> logging.Logger:
+    if (
+        isinstance(verbosity, bool)
+        or not isinstance(verbosity, int)
+        or verbosity not in _VERBOSITY_LEVELS
+    ):
+        raise ValueError("verbosity must be an integer from 0 (quiet) to 3 (max)")
+    _LOGGER.setLevel(_VERBOSITY_LEVELS[verbosity])
+    _LOGGER.propagate = False
+    if not _LOGGER.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s | barchart-data | %(levelname)s | %(message)s",
+                datefmt="%H:%M:%S",
+            )
+        )
+        _LOGGER.addHandler(handler)
+    return _LOGGER
 
 
 def interactive_chart_url(
@@ -55,6 +85,7 @@ def download_history(
     browser_executable: str | None = None,
     headless: bool = True,
     timeout_seconds: float = 120.0,
+    verbosity: int = 3,
 ) -> ImportedHistory:
     """Load history from the official interactive chart into memory.
 
@@ -69,6 +100,7 @@ def download_history(
         browser_executable=browser_executable,
         headless=headless,
         timeout_seconds=timeout_seconds,
+        verbosity=verbosity,
     ).capture_history(symbol, asset_class=asset_class)
     return ImportedHistory(
         path=None,
@@ -105,6 +137,7 @@ class BarchartInteractiveChartWorkflow:
     browser_executable: str | None = None
     headless: bool = True
     timeout_seconds: float = 120.0
+    verbosity: int = 3
 
     def interactive_chart_url(
         self,
@@ -132,13 +165,23 @@ class BarchartInteractiveChartWorkflow:
         same-origin response whose body parses as history is accepted.
         """
 
+        logger = _configure_logging(self.verbosity)
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
+        logger.info(
+            "Starting history capture: symbol=%s asset_class=%s headless=%s",
+            symbol,
+            asset_class,
+            self.headless,
+        )
         try:
             from playwright.sync_api import Error as PlaywrightError
             from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
+            logger.error(
+                "Playwright is not installed; install the browser extra first"
+            )
             raise BarchartInteractiveChartError(
                 'Install the optional browser dependency with '
                 '"python -m pip install \'barchart-data[browser]\'".'
@@ -149,13 +192,21 @@ class BarchartInteractiveChartWorkflow:
         page_status: int | None = None
         page_text = ""
         started = time.monotonic()
+        next_heartbeat = started + 5.0
 
         def on_response(response: Any) -> None:
             if not self._is_chart_response(response, chart_url):
                 return
+            logger.debug(
+                "History candidate response: status=%s content_type=%s url=%s",
+                response.status,
+                response.headers.get("content-type", ""),
+                response.url,
+            )
             try:
                 body = response.text()
             except (AttributeError, PlaywrightError):
+                logger.debug("Could not read candidate response body: %s", response.url)
                 return
             candidates.append((response, body))
 
@@ -164,9 +215,14 @@ class BarchartInteractiveChartWorkflow:
             executable = self.browser_executable or _installed_chrome()
             if executable:
                 launch_kwargs["executable_path"] = executable
+                logger.debug("Using installed browser executable")
+            else:
+                logger.debug("Using Playwright-managed Chromium")
+            logger.info("Starting browser session")
             try:
                 browser = playwright.chromium.launch(**launch_kwargs)
             except Exception as exc:
+                logger.error("Browser session could not be started")
                 raise BarchartInteractiveChartError(
                     "Could not start the optional Playwright browser. "
                     "Install Chrome or run 'python -m playwright install chromium'."
@@ -174,6 +230,7 @@ class BarchartInteractiveChartWorkflow:
             try:
                 page = browser.new_page()
                 page.on("response", on_response)
+                logger.info("Opening official chart: %s", chart_url)
                 try:
                     response = page.goto(
                         chart_url,
@@ -183,29 +240,76 @@ class BarchartInteractiveChartWorkflow:
                     page_status = response.status if response else None
                     page_text = page.locator("body").inner_text(timeout=5000)
                 except PlaywrightTimeoutError:
+                    logger.warning(
+                        "Chart navigation did not finish within %.1f seconds; "
+                        "checking captured responses",
+                        self.timeout_seconds,
+                    )
                     page_text = _safe_page_text(page)
+                logger.info(
+                    "Chart navigation completed: http_status=%s; "
+                    "history candidates=%d",
+                    page_status or "unknown",
+                    len(candidates),
+                )
+                if page_status in {401, 403}:
+                    message = _access_message(
+                        chart_url,
+                        page_status=page_status,
+                        page_text=page_text,
+                    )
+                    logger.error(message)
+                    raise BarchartInteractiveChartError(
+                        message,
+                        status_code=page_status,
+                        url=chart_url,
+                    )
 
                 while time.monotonic() - started < self.timeout_seconds:
                     for response, body in tuple(candidates):
+                        logger.debug("Parsing history candidate: %s", response.url)
                         frame = _try_decode_chart_response(body, symbol=symbol)
                         if frame is None:
+                            logger.debug(
+                                "Candidate did not contain a readable history frame"
+                            )
                             continue
+                        quality = history_quality_report(frame)
+                        logger.info(
+                            "History captured: rows=%d start=%s end=%s response=%s",
+                            quality.rows,
+                            quality.start_date,
+                            quality.end_date,
+                            response.url,
+                        )
                         return CapturedChartHistory(
                             frame=frame,
-                            quality=history_quality_report(frame),
+                            quality=quality,
                             page_url=page.url,
                             response_url=response.url,
                             status_code=response.status,
                         )
+                    now = time.monotonic()
+                    if now >= next_heartbeat:
+                        logger.debug(
+                            "Still waiting for chart history: elapsed=%.1fs "
+                            "candidates=%d",
+                            now - started,
+                            len(candidates),
+                        )
+                        next_heartbeat = now + 5.0
                     page.wait_for_timeout(250)
             finally:
+                logger.debug("Closing browser session")
                 browser.close()
+                logger.debug("Browser session closed")
 
         message = _access_message(
             chart_url,
             page_status=page_status,
             page_text=page_text,
         )
+        logger.error(message)
         raise BarchartInteractiveChartError(
             message,
             status_code=page_status,

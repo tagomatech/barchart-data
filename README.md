@@ -43,6 +43,17 @@ No Download button needs to be pressed. No file is created by default. The
 chart's own default range and interval are used, and the returned source URL
 provides provenance for the captured response.
 
+Progress is printed to the terminal in real time. Maximum verbosity is the
+default:
+
+~~~python
+result = download_history("ZCU26", verbosity=3)
+~~~
+
+Use verbosity 2 for progress only, 1 for errors only, or 0 for no output.
+At maximum verbosity, the package reports browser startup, navigation,
+candidate responses, parsing, cleanup, and a heartbeat while it is waiting.
+
 This is browser automation of the official page, not an attempt to bypass
 Barchart controls. The package does not automate sign-in, replay tokens,
 rotate proxies, or call a separate anonymous historical endpoint. If

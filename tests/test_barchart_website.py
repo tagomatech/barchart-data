@@ -156,7 +156,7 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
                 "playwright": playwright_package,
                 "playwright.sync_api": sync_api,
             },
-        ):
+        ), self.assertLogs("barchart_data.browser", level="DEBUG") as logs:
             imported = download_history(
                 "ZCU26",
                 base_url="https://example.test",
@@ -171,6 +171,11 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
         self.assertEqual(imported.frame.loc[0, "close"], 484)
         self.assertTrue(browser.closed)
         self.assertTrue(chromium.launch_kwargs["headless"])
+        self.assertTrue(any("History captured" in line for line in logs.output))
+
+    def test_download_history_rejects_invalid_verbosity(self):
+        with self.assertRaisesRegex(ValueError, "verbosity"):
+            download_history("ZCU26", verbosity=4)
 
     def test_workflow_rejects_path_injection(self):
         with self.assertRaises(ValueError):

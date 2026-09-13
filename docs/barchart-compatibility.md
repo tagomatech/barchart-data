@@ -39,6 +39,11 @@ imported = download_history(
 )
 ~~~
 
+Logging is written to the terminal in real time. Maximum verbosity is the
+default: 3 reports startup, navigation, candidate responses, parsing, cleanup,
+and a heartbeat while waiting. Use 2 for progress, 1 for errors, or 0 for no
+output.
+
 This workflow uses only requests naturally made by the official page. It does
 not automate sign-in, inspect or export credentials, replay tokens, rotate
 proxies, or call an undocumented standalone historical endpoint. A
