@@ -11,9 +11,9 @@ import pandas as pd
 from barchart_data import (
     BarchartInteractiveChartWorkflow,
     BarchartWebsiteWorkflow,
+    historical_download_url,
     history_quality_report,
     interactive_chart_url,
-    historical_download_url,
     read_barchart_history_bytes,
 )
 from barchart_data.browser import _decode_chart_response

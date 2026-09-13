@@ -18,7 +18,7 @@ from urllib.parse import quote, urlsplit
 
 import pandas as pd
 
-from .exceptions import BarchartInteractiveChartError
+from .exceptions import BarchartDecodeError, BarchartInteractiveChartError
 from .history import (
     HistoryQualityReport,
     history_quality_report,
@@ -264,8 +264,11 @@ class BarchartInteractiveChartWorkflow:
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         try:
-            from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-            from playwright.sync_api import sync_playwright
+            from playwright.sync_api import (
+                Error as PlaywrightError,
+                TimeoutError as PlaywrightTimeoutError,
+                sync_playwright,
+            )
         except ImportError as exc:
             raise BarchartInteractiveChartError(
                 'Install the optional browser dependency with '
@@ -283,7 +286,7 @@ class BarchartInteractiveChartWorkflow:
                 return
             try:
                 body = response.text()
-            except Exception:
+            except (AttributeError, PlaywrightError):
                 return
             candidates.append((response, body))
 
@@ -327,9 +330,8 @@ class BarchartInteractiveChartWorkflow:
 
                 while time.monotonic() - started < self.timeout_seconds:
                     for response, body in tuple(candidates):
-                        try:
-                            frame = _decode_chart_response(body, symbol=symbol)
-                        except Exception:
+                        frame = _try_decode_chart_response(body, symbol=symbol)
+                        if frame is None:
                             continue
                         return CapturedChartHistory(
                             frame=frame,
@@ -407,7 +409,7 @@ def _decode_json_chart_response(
             frame.to_csv(index=False),
             symbol=symbol,
         )
-    except Exception:
+    except (BarchartDecodeError, TypeError, ValueError):
         return None
 
 
@@ -442,8 +444,19 @@ def _frame_from_json_rows(rows: list[Any]) -> pd.DataFrame | None:
 def _safe_page_text(page: Any) -> str:
     try:
         return page.locator("body").inner_text(timeout=1000)
-    except Exception:
+    except Exception:  # noqa: BLE001 - page text is best-effort diagnostics
         return ""
+
+
+def _try_decode_chart_response(
+    text: str,
+    *,
+    symbol: str | None,
+) -> pd.DataFrame | None:
+    try:
+        return _decode_chart_response(text, symbol=symbol)
+    except (BarchartDecodeError, TypeError, ValueError):
+        return None
 
 
 def _access_message(url: str, *, page_status: int | None, page_text: str) -> str:

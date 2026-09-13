@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 class BarchartDataError(Exception):
     """Base class for package errors."""
 

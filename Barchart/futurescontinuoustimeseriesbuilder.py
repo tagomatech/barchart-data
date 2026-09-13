@@ -120,7 +120,7 @@ class ContractCycle:
         cls,
         root: str,
         months: str | Iterable[str] | None = None,
-    ) -> "ContractCycle":
+    ) -> ContractCycle:
         normalized_root = root.strip().upper()
         if months is None:
             values = DEFAULT_ROOT_CYCLES.get(

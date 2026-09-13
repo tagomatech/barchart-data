@@ -288,8 +288,8 @@ def _validated_base_url(value: str) -> str:
 
 
 __all__ = [
+    "PUBLIC_BARCHART_URL",
     "BarchartWebsiteWorkflow",
     "ImportedHistory",
-    "PUBLIC_BARCHART_URL",
     "historical_download_url",
 ]

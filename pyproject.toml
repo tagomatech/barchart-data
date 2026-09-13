@@ -38,3 +38,9 @@ dev = [
 where = ["."]
 include = ["barchart_data*", "Barchart*"]
 exclude = ["Barchart.tests*"]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint.per-file-ignores]
+"Barchart/**" = ["N999"]
