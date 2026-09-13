@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from io import StringIO
 from os import PathLike
 from typing import IO, Any, TypeAlias
 
@@ -107,6 +108,50 @@ def read_barchart_history_csv(
             f"Could not read Barchart history CSV from {source!r}."
         ) from exc
     return normalize_barchart_history(frame, symbol=symbol, sort=sort)
+
+
+def read_barchart_history_text(
+    text: str,
+    *,
+    symbol: str | None = None,
+    sort: bool = True,
+) -> pd.DataFrame:
+    """Read chart-history text captured from a normal Barchart page session.
+
+    Barchart chart feeds have used both headered CSV and raw DDF-style CSV
+    payloads. This parser accepts either form and deliberately handles text
+    only; it never makes a network request.
+    """
+
+    if not isinstance(text, str) or not text.strip():
+        raise BarchartDecodeError("Barchart chart history response is empty.")
+
+    try:
+        frame = pd.read_csv(StringIO(text), sep=None, engine="python")
+        return normalize_barchart_history(frame, symbol=symbol, sort=sort)
+    except (BarchartDecodeError, pd.errors.ParserError, ValueError):
+        pass
+
+    try:
+        raw = pd.read_csv(StringIO(text), sep=None, engine="python", header=None)
+    except (pd.errors.ParserError, ValueError) as exc:
+        raise BarchartDecodeError(
+            "Could not decode the captured Barchart chart history response."
+        ) from exc
+
+    if raw.empty:
+        raise BarchartDecodeError("Barchart chart history response has no rows.")
+    columns = {
+        8: ["symbol", "date", "open", "high", "low", "close", "volume", "openInterest"],
+        7: ["symbol", "date", "open", "high", "low", "close", "volume"],
+        6: ["date", "open", "high", "low", "close", "volume"],
+    }.get(raw.shape[1])
+    if columns is None:
+        raise BarchartDecodeError(
+            "Captured Barchart history has an unsupported column layout."
+        )
+    raw.columns = columns
+    return normalize_barchart_history(raw, symbol=symbol, sort=sort)
 
 
 def history_quality_report(
@@ -274,4 +319,5 @@ __all__ = [
     "normalize_barchart_history",
     "read_barchart_csv",
     "read_barchart_history_csv",
+    "read_barchart_history_text",
 ]

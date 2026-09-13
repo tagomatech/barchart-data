@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "barchart-data"
-version = "0.8.0"
-description = "Credential-free Barchart public-data client and history CSV importer"
+version = "0.9.0"
+description = "Barchart public-data client, browser chart capture, and history importer"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
@@ -25,6 +25,9 @@ demo = [
     "matplotlib>=3.7",
     "jupyterlab>=4.0",
     "screamer>=1.2,<2",
+]
+browser = [
+    "playwright>=1.45",
 ]
 dev = [
     "pytest>=8",

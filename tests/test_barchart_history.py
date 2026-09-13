@@ -7,6 +7,7 @@ from barchart_data import (
     BarchartDecodeError,
     normalize_barchart_history,
     read_barchart_history_csv,
+    read_barchart_history_text,
 )
 
 
@@ -50,6 +51,30 @@ class BarchartHistoryTests(unittest.TestCase):
             read_barchart_history_csv(
                 io.StringIO("Date,Close\nnot-a-date,1\n")
             )
+
+    def test_read_text_decodes_raw_chart_feed_rows(self):
+        frame = read_barchart_history_text(
+            "ZCU26,2026-08-20,480,485,479,483,1000,1200\n"
+            "ZCU26,2026-08-21,481,486,480,484,2000,1300\n",
+            symbol="ZCU26",
+        )
+
+        self.assertEqual(
+            frame["date"].dt.strftime("%Y-%m-%d").tolist(),
+            ["2026-08-20", "2026-08-21"],
+        )
+        self.assertEqual(frame["close"].tolist(), [483, 484])
+        self.assertEqual(frame["openInterest"].tolist(), [1200, 1300])
+
+    def test_read_text_decodes_headered_chart_feed_rows(self):
+        frame = read_barchart_history_text(
+            "timestamp,open,high,low,last,volume\n"
+            "2026-08-21T00:00:00Z,481,486,480,484,2000\n",
+            symbol="ZCU26",
+        )
+
+        self.assertEqual(frame.loc[0, "symbol"], "ZCU26")
+        self.assertEqual(frame.loc[0, "close"], 484)
 
 
 if __name__ == "__main__":

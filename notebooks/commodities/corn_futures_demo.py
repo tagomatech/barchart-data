@@ -4,8 +4,8 @@
 # # CME/CBOT Corn Sep 2026 (ZCU26)
 #
 # This notebook focuses on one real, tradable contract. It reads the
-# historical OHLCV and open-interest data for ZCU26 from a permitted CSV
-# downloaded from Barchart, draws candlesticks, and
+# historical OHLCV and open-interest data for ZCU26 from the official
+# interactive chart or its permitted CSV export, draws candlesticks, and
 # adds causal streaming indicators from Screamer.
 #
 # The chart uses only actual data for this named contract. It does not stitch
@@ -35,40 +35,82 @@ from IPython.display import display
 from matplotlib.patches import Rectangle
 from screamer import ATR, BollingerBands, RollingMean, RollingRSI
 
-from barchart_data import BarchartWebsiteWorkflow
+from barchart_data import (
+    BarchartInteractiveChartError,
+    BarchartInteractiveChartWorkflow,
+    BarchartWebsiteWorkflow,
+)
 
 CONTRACT = "ZCU26"
 PLOT_SESSIONS = 180
 DOWNLOAD_DIR = Path("data")
 OPEN_BROWSER = False
+CAPTURE_INTERACTIVE_CHART = False
+DOWNLOAD_FROM_INTERACTIVE_CHART = False
 workflow = BarchartWebsiteWorkflow(download_dir=DOWNLOAD_DIR)
 DOWNLOAD_URL = workflow.historical_download_url(CONTRACT)
+INTERACTIVE_URL = BarchartInteractiveChartWorkflow().interactive_chart_url(CONTRACT)
 
 # %% [markdown]
 # ## 1. Source page
 #
-# The default is False so re-running this notebook does not open a browser
-# unexpectedly. Set OPEN_BROWSER to True to open the official page.
+# The two browser flags default to False so re-running this notebook does not
+# open a browser unexpectedly. OPEN_BROWSER only hands the page to the default
+# browser. CAPTURE_INTERACTIVE_CHART opens an optional Playwright browser and
+# waits for the page's own chart history response. DOWNLOAD_FROM_INTERACTIVE_CHART
+# opens the default browser and waits for a CSV exported through Barchart's UI.
 
 # %%
 print(f"Official download page: {DOWNLOAD_URL}")
+print(f"Official interactive chart: {INTERACTIVE_URL}")
 if OPEN_BROWSER:
     workflow.open_historical_download_page(CONTRACT)
 
 # %% [markdown]
 # ## 2. Fetch actual Barchart data
 #
-# Download the permitted CSV manually from the official page and place it in
-# the configured data folder before running this cell.
+# Set CAPTURE_INTERACTIVE_CHART = True to let the optional browser workflow
+# capture a readable history response from the official chart. Use the chart's
+# own menus while the browser is open. If that normal session is denied, the
+# cell explains the reason and falls back to the permitted local CSV.
 
 # %%
-try:
-    imported = workflow.import_latest_csv(symbol=CONTRACT)
-except FileNotFoundError as exc:
-    raise RuntimeError(
-        f"Place a permitted {CONTRACT} CSV in {DOWNLOAD_DIR}."
-    ) from exc
-history = imported.frame
+history_source = "permitted Barchart CSV export"
+history = None
+if CAPTURE_INTERACTIVE_CHART:
+    try:
+        captured = BarchartInteractiveChartWorkflow(
+            headless=False,
+            timeout_seconds=120,
+        ).capture_history(CONTRACT)
+        history = captured.frame
+        history_source = "interactive chart response from normal browser session"
+        print(f"Captured chart response: {captured.response_url}")
+    except BarchartInteractiveChartError as exc:
+        print(f"Interactive capture unavailable: {exc}")
+        print("Falling back to the local Barchart CSV workflow.")
+
+if history is None and DOWNLOAD_FROM_INTERACTIVE_CHART:
+    try:
+        imported = BarchartInteractiveChartWorkflow(
+            download_dir=DOWNLOAD_DIR,
+        ).download_interactive_csv(CONTRACT)
+        history = imported.frame
+        history_source = "CSV exported through the interactive chart UI"
+        print(f"Imported chart export: {imported.path}")
+    except (FileNotFoundError, TimeoutError) as exc:
+        print(f"Interactive CSV export unavailable: {exc}")
+        print("Falling back to the local Barchart CSV workflow.")
+
+if history is None:
+    try:
+        imported = workflow.import_latest_csv(symbol=CONTRACT)
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            f"Place a permitted {CONTRACT} CSV in {DOWNLOAD_DIR}, or set "
+            "CAPTURE_INTERACTIVE_CHART = True."
+        ) from exc
+    history = imported.frame
 if history.empty:
     raise ValueError(f"No Barchart rows returned for {CONTRACT}.")
 
@@ -279,7 +321,7 @@ axes[3].xaxis.set_major_formatter(mdates.DateFormatter("%b\n%Y"))
 fig.text(
     0.01,
     0.01,
-    "Source: permitted Barchart CSV export | "
+    f"Source: {history_source} | "
     "Screamer indicators | fixed contract: ZCU26",
     color=muted,
     fontsize=9,
@@ -327,5 +369,7 @@ display(recent)
 # arrays and live streams. The package is used here for Bollinger Bands, ATR,
 # RSI, and rolling volume mean.
 #
-# Running this notebook requires a permitted local Barchart CSV export. The
-# package does not store credentials or automate sign-in.
+# Running this notebook can use the optional browser capture when the normal
+# chart session exposes its history response, or the user can export a CSV from
+# the chart UI. Otherwise it requires a permitted local Barchart CSV export.
+# The package does not store credentials or automate sign-in.

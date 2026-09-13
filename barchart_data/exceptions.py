@@ -27,3 +27,18 @@ class BarchartPublicPageError(BarchartDataError):
         super().__init__(message)
         self.status_code = status_code
         self.url = url
+
+
+class BarchartInteractiveChartError(BarchartDataError):
+    """Raised when a normal interactive-chart browser session cannot provide data."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        url: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.url = url

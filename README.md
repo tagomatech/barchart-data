@@ -1,8 +1,9 @@
 # barchart-data
 
-An installable Python toolkit for Barchart market data that requires no
-Barchart API key or login. It reads public quote pages and parses historical
-CSV files downloaded through the Barchart website.
+An installable Python toolkit for Barchart market data. It reads public quote
+pages, can capture history naturally loaded by the official interactive chart
+in a normal browser session, and parses historical CSV files downloaded through
+the Barchart website. The package never automates sign-in or stores credentials.
 
 The package is designed for commodity research first, while keeping its public
 asset-class handling extensible to equities, funds, currencies, and other
@@ -26,6 +27,13 @@ For local development:
 python -m pip install -e ".[dev,demo]"
 ~~~
 
+For the optional browser-assisted chart capture:
+
+~~~powershell
+python -m pip install -e ".[browser]"
+playwright install chromium
+~~~
+
 The repository is also configured for tokenless PyPI publication through
 GitHub Actions. The GitHub install above works immediately. To enable the
 standard command python -m pip install barchart-data, create a PyPI trusted
@@ -34,8 +42,8 @@ publisher for owner tagomatech, repository barchart-data, workflow
 version tag:
 
 ~~~powershell
-git tag v0.8.0
-git push origin v0.8.0
+git tag v0.9.0
+git push origin v0.9.0
 ~~~
 
 ## Access model
@@ -53,9 +61,10 @@ corn_profile = client.profile("ZCU26")
 ~~~
 
 The public adapter is limited to quote/profile fields embedded in public
-overview pages. Historical data is deliberately not fetched through an
-anonymous automated endpoint because Barchart can deny that route with HTTP
-401/403. For historical data, download a CSV from the Barchart
+overview pages. Historical data is not fetched through a separately scripted
+anonymous endpoint because Barchart can deny that route with HTTP 401/403.
+The interactive-chart workflow below uses the page itself when a normal browser
+session receives chart data. Otherwise, download a CSV from the Barchart
 historical-data page using an account and plan that permits it.
 The available lookback window and download quota depend on the Barchart
 product and can change; see the [official download help](https://help.barchart.com/support/solutions/articles/242748-how-can-i-download-historical-data-).
@@ -96,6 +105,70 @@ source columns, add canonical date/OHLCV fields, and report duplicates and
 missing values. It performs no login, private-endpoint request, or network
 operation during import. The lower-level read_barchart_history_csv function
 remains available when an exact path is preferred.
+
+## Interactive chart workflow
+
+The interactive page is the authoritative place where Barchart applies its
+chart menus, frequency, range, and entitlement rules. The optional workflow
+opens that page in a visible Playwright browser and listens for a successful
+same-origin history response that the page naturally makes:
+
+~~~python
+from barchart_data import BarchartInteractiveChartWorkflow
+
+chart = BarchartInteractiveChartWorkflow(
+    browser_executable=None,  # or the path to an installed Chrome/Edge
+    headless=False,
+    timeout_seconds=120,
+)
+captured = chart.capture_history("ZCU26")
+history = captured.frame
+print(captured.response_url)
+print(captured.quality.as_dict())
+~~~
+
+If a fresh Playwright browser receives CloudFront 403 but the chart works in a
+browser you started yourself, launch that browser with a local DevTools port
+and opt in explicitly:
+
+~~~powershell
+& "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe" --remote-debugging-port=9222 --user-data-dir="$env:TEMP/barchart-data-browser"
+~~~
+
+Open the chart in that window, then capture through its normal visible session:
+
+~~~python
+chart = BarchartInteractiveChartWorkflow(
+    cdp_endpoint="http://127.0.0.1:9222",
+    headless=False,
+)
+captured = chart.capture_history("ZCU26")
+~~~
+
+This CDP mode attaches only to the browser endpoint you explicitly provide. It
+does not export cookies, passwords, or tokens, and it does not solve a
+Barchart entitlement or CloudFront denial.
+
+For the most conservative path, use the browser you already use manually and
+let the package watch its download folder:
+
+~~~python
+chart = BarchartInteractiveChartWorkflow(download_dir="downloads")
+imported = chart.download_interactive_csv("ZCU26")
+history = imported.frame
+~~~
+
+This opens the official interactive chart in the default browser, waits for
+you to choose the chart settings and press Barchart's own Download control,
+then imports and quality-checks the completed local CSV. Set download_dir to
+the browser's actual download directory.
+
+While the browser is open, use Barchart's own controls if you need a different
+range or interval. The package accepts only a readable successful response
+from the official page and does not call an undocumented endpoint, replay
+tokens, rotate proxies, automate login, or bypass CloudFront. If Barchart
+returns a verification or 401/403 response, the method raises
+`BarchartInteractiveChartError`; use the official CSV workflow instead.
 
 ## Commodity utilities
 

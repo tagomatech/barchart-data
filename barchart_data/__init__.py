@@ -14,6 +14,7 @@ from .catalog import (
 from .exceptions import (
     BarchartDataError,
     BarchartDecodeError,
+    BarchartInteractiveChartError,
     BarchartPublicPageError,
     BarchartTransportError,
 )
@@ -23,6 +24,12 @@ from .history import (
     normalize_barchart_history,
     read_barchart_csv,
     read_barchart_history_csv,
+    read_barchart_history_text,
+)
+from .browser import (
+    BarchartInteractiveChartWorkflow,
+    CapturedChartHistory,
+    interactive_chart_url,
 )
 from .normalization import rebase_frame, rebase_many, rebase_to_base
 from .public import BarchartPublicClient, PublicBarchartClient, PublicWebClient
@@ -35,6 +42,7 @@ from .website import (
 __all__ = [
     "BarchartDataError",
     "BarchartDecodeError",
+    "BarchartInteractiveChartError",
     "BarchartPublicClient",
     "BarchartPublicPageError",
     "BarchartTransportError",
@@ -43,6 +51,8 @@ __all__ = [
     "HistoryQualityReport",
     "ImportedHistory",
     "BarchartWebsiteWorkflow",
+    "BarchartInteractiveChartWorkflow",
+    "CapturedChartHistory",
     "history_quality_report",
     "historical_download_url",
     "normalize_barchart_history",
@@ -55,6 +65,8 @@ __all__ = [
     "rebase_to_base",
     "read_barchart_csv",
     "read_barchart_history_csv",
+    "read_barchart_history_text",
+    "interactive_chart_url",
 ]
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"

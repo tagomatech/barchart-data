@@ -17,6 +17,13 @@ Install the notebook and Screamer extras with:
 python -m pip install -e '.[demo]'
 ~~~
 
+Install the optional browser-assisted chart workflow with:
+
+~~~
+python -m pip install -e '.[browser]'
+playwright install chromium
+~~~
+
 ## Design
 
 The package is split into three replaceable layers:
@@ -25,6 +32,8 @@ The package is split into three replaceable layers:
   embedded in public overview pages.
 - **Local history**: BarchartWebsiteWorkflow imports the permitted CSV export
   and reports its provenance and quality.
+- **Interactive chart capture**: BarchartInteractiveChartWorkflow observes
+  successful history responses naturally loaded by the official chart page.
 - **Builder**: ContinuousFuturesBuilder handles contract cycles, date
   normalization, nearby selection, duplicate removal, and roll-segment output.
 
@@ -83,10 +92,12 @@ comparisons, not continuous futures.
 Install the project demo extra before running the notebook. Screamer requires
 Python 3.11 or newer.
 
-The public page reader only accesses quote/profile overview pages. Historical
-data enters through the user-led CSV export workflow. The package does not
-retry through an undocumented endpoint, automate authentication, or bypass
-Barchart access controls.
+The public page reader only accesses quote/profile overview pages. The
+interactive workflow uses a normal visible browser and accepts only a
+successful same-origin history response produced by the page. It does not
+retry through an undocumented endpoint, automate authentication, inspect
+cookies, or bypass Barchart access controls. If the page returns CloudFront
+verification or 401/403, use the user-led CSV export workflow.
 
 Public requests are deliberately paced at one second apart per client.
 Overview pages are cached for five minutes, while historical responses are
@@ -133,6 +144,43 @@ notebooks/commodities/barchart_csv_workflow_demo.ipynb. It uses ZCU26 and
 shows provenance, data-quality checks, candlesticks, volume, and Screamer
 indicators. Downloaded market data is intentionally not committed to the
 repository.
+
+## Interactive chart workflow
+
+The interactive chart can be captured when the current normal browser session
+is allowed to receive its history response:
+
+~~~
+from barchart_data import BarchartInteractiveChartWorkflow
+
+chart = BarchartInteractiveChartWorkflow(headless=False)
+captured = chart.capture_history("ZCU26")
+history = captured.frame
+~~~
+
+The browser stays open while the method waits, so the user can use the chart's
+own menu controls. The response parser accepts headered CSV, raw DDF-style CSV,
+and row-oriented JSON payloads. It records the response URL and a quality report
+but never stores cookies or credentials.
+
+When an automated browser is denied but a user-started Chrome or Edge window
+works, start that window with --remote-debugging-port=9222 and pass
+cdp_endpoint="http://127.0.0.1:9222". This is an explicit local connection to
+the user's browser; it does not bypass CloudFront, automate login, or export
+browser credentials.
+
+For a browser that already works normally, download through Barchart's own
+interface and let the package import the result:
+
+~~~
+chart = BarchartInteractiveChartWorkflow(download_dir="downloads")
+imported = chart.download_interactive_csv("ZCU26")
+history = imported.frame
+~~~
+
+The method opens the official interactive chart, waits for the user's Download
+action, watches only the local download folder, and returns the normalized
+history with its quality report.
 
 ## Agricultural catalog and relative comparison
 
