@@ -8,9 +8,13 @@ page itself produces.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from threading import Lock
 from typing import Any
 from urllib.parse import quote, urlsplit
 
@@ -19,7 +23,6 @@ import pandas as pd
 from .exceptions import (
     BarchartDecodeError,
     BarchartInteractiveChartError,
-    PublicChartError,
 )
 from .history import (
     HistoryQualityReport,
@@ -32,9 +35,8 @@ from .website import (
     _validated_base_url,
     _validated_segment,
 )
-from .yahoo import _download_yahoo_futures_history
-
 _LOGGER = logging.getLogger(__name__)
+_WINDOWS_PLAYWRIGHT_POLICY_LOCK = Lock()
 _VERBOSITY_LEVELS = {
     0: logging.CRITICAL + 1,
     1: logging.ERROR,
@@ -85,7 +87,8 @@ def download_history(
     asset_class: str = "futures",
     base_url: str = PUBLIC_BARCHART_URL,
     browser_executable: str | None = None,
-    headless: bool = True,
+    headless: bool = False,
+    start_minimized: bool = True,
     timeout_seconds: float = 120.0,
     verbosity: int = 3,
 ) -> ImportedHistory:
@@ -94,51 +97,18 @@ def download_history(
     The chart page makes the history request itself. This function observes
     that successful same-origin response, parses it, and closes the browser.
     It does not click controls, save files, automate sign-in, or call a
-    separate Barchart historical endpoint. A futures browser denial or startup
-    failure uses the public exact-contract fallback.
+    separate Barchart historical endpoint. By default, the normal browser is
+    visible but starts minimized so it does not take focus from the user.
     """
 
-    try:
-        captured = BarchartInteractiveChartWorkflow(
-            base_url=base_url,
-            browser_executable=browser_executable,
-            headless=headless,
-            timeout_seconds=timeout_seconds,
-            verbosity=verbosity,
-        ).capture_history(symbol, asset_class=asset_class)
-    except BarchartInteractiveChartError as error:
-        if asset_class.casefold() != "futures":
-            raise
-        logger = _configure_logging(verbosity)
-        if error.status_code in {401, 403}:
-            logger.warning(
-                "Barchart returned HTTP %s; using the public exact-contract "
-                "futures chart feed. This fallback does not bypass Barchart.",
-                error.status_code,
-            )
-        else:
-            logger.warning(
-                "Barchart browser session was unavailable; using the public "
-                "exact-contract futures chart feed. This fallback does not "
-                "bypass Barchart."
-            )
-        try:
-            imported = _download_yahoo_futures_history(
-                symbol,
-                timeout_seconds=min(timeout_seconds, 30.0),
-            )
-        except PublicChartError as fallback_error:
-            logger.error("Public exact-contract fallback failed: %s", fallback_error)
-            raise error from fallback_error
-        logger.info(
-            "History captured from public exact-contract feed: rows=%d "
-            "start=%s end=%s source=%s",
-            imported.quality.rows,
-            imported.quality.start_date,
-            imported.quality.end_date,
-            imported.source,
-        )
-        return imported
+    captured = BarchartInteractiveChartWorkflow(
+        base_url=base_url,
+        browser_executable=browser_executable,
+        headless=headless,
+        start_minimized=start_minimized,
+        timeout_seconds=timeout_seconds,
+        verbosity=verbosity,
+    ).capture_history(symbol, asset_class=asset_class)
     return ImportedHistory(
         path=None,
         frame=captured.frame,
@@ -166,13 +136,17 @@ class BarchartInteractiveChartWorkflow:
 
         python -m pip install "barchart-data[browser]"
 
-    Barchart may still block a client/IP. In that case the workflow raises a
-    descriptive error and does not attempt to bypass the restriction.
+    The default is a normal headed browser started minimized. This matches the
+    browser session that a user can observe in the taskbar without stealing
+    focus from another application. Barchart may still block a client/IP; in
+    that case the workflow raises a descriptive error and does not attempt to
+    bypass the restriction.
     """
 
     base_url: str = PUBLIC_BARCHART_URL
     browser_executable: str | None = None
-    headless: bool = True
+    headless: bool = False
+    start_minimized: bool = True
     timeout_seconds: float = 120.0
     verbosity: int = 3
 
@@ -196,6 +170,56 @@ class BarchartInteractiveChartWorkflow:
         *,
         asset_class: str = "futures",
     ) -> CapturedChartHistory:
+        """Capture chart history, isolating sync Playwright from notebook loops."""
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return self._capture_history_sync(symbol, asset_class=asset_class)
+
+        logger = _configure_logging(self.verbosity)
+        logger.debug(
+            "Active asyncio loop detected; running Playwright in a worker thread"
+        )
+        with ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="barchart-playwright",
+        ) as executor:
+            return executor.submit(
+                self._capture_history_in_worker,
+                symbol,
+                asset_class=asset_class,
+            ).result()
+
+    def _capture_history_in_worker(
+        self,
+        symbol: str,
+        *,
+        asset_class: str,
+    ) -> CapturedChartHistory:
+        """Run Playwright on a subprocess-capable loop on Windows notebooks."""
+
+        if sys.platform != "win32":
+            return self._capture_history_sync(symbol, asset_class=asset_class)
+
+        # Jupyter can install WindowsSelectorEventLoopPolicy process-wide.
+        # Playwright creates its own loop and its driver needs Proactor
+        # subprocess support, so temporarily use that policy for this worker.
+        with _WINDOWS_PLAYWRIGHT_POLICY_LOCK:
+            previous_policy = asyncio.get_event_loop_policy()
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+            try:
+                return self._capture_history_sync(symbol, asset_class=asset_class)
+            finally:
+                asyncio.set_event_loop(None)
+                asyncio.set_event_loop_policy(previous_policy)
+
+    def _capture_history_sync(
+        self,
+        symbol: str,
+        *,
+        asset_class: str = "futures",
+    ) -> CapturedChartHistory:
         """Capture the history response naturally loaded by the chart page.
 
         The page's default chart range and interval are used. Only a successful
@@ -206,10 +230,12 @@ class BarchartInteractiveChartWorkflow:
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         logger.info(
-            "Starting history capture: symbol=%s asset_class=%s headless=%s",
+            "Starting history capture: symbol=%s asset_class=%s headless=%s "
+            "start_minimized=%s",
             symbol,
             asset_class,
             self.headless,
+            self.start_minimized,
         )
         try:
             from playwright.sync_api import Error as PlaywrightError
@@ -262,11 +288,20 @@ class BarchartInteractiveChartWorkflow:
                 logger.debug("Using configured browser executable")
             else:
                 launch_kwargs["channel"] = "chromium"
-                logger.debug("Using Playwright Chromium channel (new headless mode)")
+                logger.debug("Using Playwright Chromium channel")
+            if not self.headless and self.start_minimized:
+                launch_kwargs["args"] = ["--start-minimized"]
+                logger.debug("Starting visible browser minimized")
+            if self.headless:
+                mode = "headless"
+            elif self.start_minimized:
+                mode = "visible-minimized"
+            else:
+                mode = "visible"
             logger.info(
                 "Starting browser session: headless=%s mode=%s",
                 self.headless,
-                "new" if not self.browser_executable else "configured executable",
+                mode,
             )
             try:
                 browser = playwright.chromium.launch(**launch_kwargs)

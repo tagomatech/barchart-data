@@ -22,26 +22,17 @@ py -3.13 -c "import barchart_data; print(barchart_data.__version__); print(barch
 
 ## Historical data
 
-There is one historical acquisition call. It first opens the official Barchart
-interactive chart in a headless browser session and observes the history
-response that the page naturally requests. No browser window is displayed. The
-response is normalized in memory and the browser is closed automatically.
-
-If Barchart returns HTTP 401 or 403, or the browser session cannot run (for
-example inside a notebook's active asyncio loop), the same call automatically
-reads the exact futures contract from Yahoo Finance's public chart feed. For
-example, Barchart symbol ZCU26 is mapped to Yahoo symbol ZCU26.CBT. This is a
-non-Barchart fallback, and the returned source URL makes that provenance
-visible. It is not a continuous series and it does not silently combine
-different contracts.
-
-The default uses Playwright's Chromium channel, which explicitly selects
-Chrome's newer headless implementation rather than the legacy headless shell.
+There is one historical acquisition call. It opens the official Barchart
+interactive chart in a normal headed browser session and observes the history
+response that the page naturally requests. By default the browser starts
+minimized, remains visible in the taskbar, and does not take focus from the
+application you are using. The response is normalized in memory and the
+browser is closed automatically.
 
 ~~~python
 from barchart_data import download_history
 
-result = download_history("ZCU26")
+result = download_history("ZCU26")  # Barchart, visible browser, minimized
 history = result.frame
 
 print(history.tail())
@@ -50,9 +41,8 @@ assert result.path is None
 ~~~
 
 No Download button needs to be pressed. No file is created by default. The
-chart's own default range and interval are used when Barchart is available.
-The public fallback requests the complete daily range exposed for that exact
-contract. In both cases, the returned source URL provides provenance.
+chart's own default range and interval are used, and the returned source URL
+provides provenance. `result.path` is always `None` for this browser workflow.
 
 Progress is printed to the terminal in real time. Maximum verbosity is the
 default:
@@ -69,10 +59,23 @@ This is browser automation of the official page, not an attempt to bypass
 Barchart controls. The package does not automate sign-in, replay tokens,
 rotate proxies, disguise automation, or call a separate anonymous Barchart
 historical endpoint. A Barchart/CloudFront denial or browser-session failure
-triggers only the clearly labeled public futures fallback. The fallback
-contains daily OHLCV; Barchart open interest and settlement fields are not
-invented when that source does not publish them. If neither source works, the
-function raises BarchartInteractiveChartError.
+raises `BarchartInteractiveChartError`; the package does not substitute data
+from another provider. If a notebook or VS Code kernel already has an active
+asyncio loop, the synchronous Playwright session is isolated in a worker
+thread automatically.
+
+The `headless` option remains available for environments where it is accepted,
+but the default is intentionally `headless=False, start_minimized=True` because
+some Barchart sessions distinguish a normal browser from a headless one:
+
+~~~python
+result = download_history(
+    "ZCU26",
+    headless=False,
+    start_minimized=True,
+    verbosity=3,
+)
+~~~
 
 The same function accepts another public Barchart asset class:
 
@@ -111,9 +114,8 @@ The package includes:
 The main demonstration is
 notebooks/commodities/corn_futures_demo.ipynb. It uses the real CME/CBOT
 September 2026 Corn contract, ZCU26, and renders candlesticks, volume,
-Bollinger Bands, ATR, RSI, and a rolling volume mean. Its source label
-identifies whether the data came from Barchart or the public exact-contract
-fallback.
+Bollinger Bands, ATR, RSI, and a rolling volume mean. Its source label records
+the Barchart chart response used for the in-memory result.
 
 The agriculture comparison is in
 notebooks/commodities/agriculture_portfolio_demo.ipynb. The equity example is

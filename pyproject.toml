@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "barchart-data"
-version = "0.10.0"
-description = "Credential-free public market-data and interactive chart history client"
+version = "0.11.0"
+description = "Credential-free Barchart public data and interactive chart history client"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}

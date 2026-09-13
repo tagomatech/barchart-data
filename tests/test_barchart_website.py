@@ -3,6 +3,7 @@ import sys
 import tempfile
 import types
 import unittest
+import asyncio
 from pathlib import Path
 from typing import ClassVar
 from unittest.mock import patch
@@ -176,9 +177,28 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(imported.frame.loc[0, "close"], 484)
         self.assertTrue(browser.closed)
-        self.assertTrue(chromium.launch_kwargs["headless"])
+        self.assertFalse(chromium.launch_kwargs["headless"])
         self.assertEqual(chromium.launch_kwargs["channel"], "chromium")
+        self.assertEqual(chromium.launch_kwargs["args"], ["--start-minimized"])
         self.assertTrue(any("History captured" in line for line in logs.output))
+
+    def test_capture_history_isolated_from_active_asyncio_loop(self):
+        workflow = BarchartInteractiveChartWorkflow()
+        sentinel = object()
+
+        with patch.object(
+            BarchartInteractiveChartWorkflow,
+            "_capture_history_sync",
+            return_value=sentinel,
+        ) as capture:
+
+            async def call_from_kernel():
+                return workflow.capture_history("ZCU26")
+
+            result = asyncio.run(call_from_kernel())
+
+        self.assertIs(result, sentinel)
+        capture.assert_called_once_with("ZCU26", asset_class="futures")
 
     def test_download_history_rejects_invalid_verbosity(self):
         with self.assertRaisesRegex(ValueError, "verbosity"):
