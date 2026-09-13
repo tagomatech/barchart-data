@@ -124,8 +124,14 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
         browser = FakeBrowser()
 
         class FakeChromium:
+            def __init__(self):
+                self.launch_kwargs = None
+
             def launch(self, **kwargs):
+                self.launch_kwargs = kwargs
                 return browser
+
+        chromium = FakeChromium()
 
         class FakePlaywright:
             def __init__(self, chromium):
@@ -138,7 +144,7 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
                 return False
 
         browser = FakeBrowser()
-        playwright = FakePlaywright(FakeChromium())
+        playwright = FakePlaywright(chromium)
         sync_api = types.ModuleType("playwright.sync_api")
         sync_api.Error = Exception
         sync_api.TimeoutError = TimeoutError
@@ -164,6 +170,7 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(imported.frame.loc[0, "close"], 484)
         self.assertTrue(browser.closed)
+        self.assertTrue(chromium.launch_kwargs["headless"])
 
     def test_workflow_rejects_path_injection(self):
         with self.assertRaises(ValueError):

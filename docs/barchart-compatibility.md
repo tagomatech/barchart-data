@@ -11,7 +11,7 @@ py -3.13 -m playwright install chromium
 ## Historical ingestion
 
 The package has one supported historical acquisition path. It opens the
-official interactive chart in a visible Playwright browser, observes a
+official interactive chart in a headless browser session, observes a
 successful same-origin history response produced by that page, normalizes it,
 and returns it in memory:
 
@@ -25,16 +25,16 @@ print(imported.source)
 assert imported.path is None
 ~~~
 
-The method does not press the website Download control, create a download
-directory, or retain a browser artifact. It uses the chart's default range and
-interval. Browser configuration is limited to the optional executable path,
-visibility, and timeout:
+The method does not display a browser window, press the website Download
+control, create a download directory, or retain a browser artifact. It uses
+the chart's default range and interval. Browser configuration is limited to
+the optional executable path, headless setting, and timeout:
 
 ~~~python
 imported = download_history(
     "ZCU26",
     browser_executable=None,
-    headless=False,
+    headless=True,
     timeout_seconds=120,
 )
 ~~~

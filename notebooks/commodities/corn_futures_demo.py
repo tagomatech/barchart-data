@@ -48,8 +48,9 @@ INTERACTIVE_URL = interactive_chart_url(CONTRACT)
 # %% [markdown]
 # ## 1. Source page
 #
-# Running this cell opens one visible Playwright browser. The downloader waits
-# for the chart page's own history response and returns it in memory.
+# Running this cell uses one headless Playwright browser session. The
+# downloader waits for the chart page's own history response and returns it in
+# memory without displaying a browser window.
 
 # %%
 print(f"Official interactive chart: {INTERACTIVE_URL}")
@@ -67,7 +68,7 @@ try:
 except BarchartInteractiveChartError as exc:
     raise RuntimeError(
         "Barchart did not expose chart history to this browser session. "
-        "Check the official chart in the browser window and try again."
+        "Check that the official chart is available from this network and try again."
     ) from exc
 
 history_source = f"automatic chart response: {imported.source}"

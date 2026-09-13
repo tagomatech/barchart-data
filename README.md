@@ -23,9 +23,10 @@ py -3.13 -c "import barchart_data; print(barchart_data.__version__); print(barch
 ## Historical data
 
 There is one historical acquisition method. The package opens the official
-Barchart interactive chart in a visible Playwright browser and observes the
-history response that the page naturally requests. The response is normalized
-in memory and the browser is closed automatically.
+Barchart interactive chart in a headless browser session and observes the
+history response that the page naturally requests. No browser window is
+displayed. The response is normalized in memory and the browser is closed
+automatically.
 
 ~~~python
 from barchart_data import download_history

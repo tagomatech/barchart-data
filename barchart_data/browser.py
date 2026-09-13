@@ -1,9 +1,9 @@
 """Browser-assisted access to data naturally loaded by Barchart charts.
 
 This module does not call undocumented endpoints, automate sign-in, inspect
-cookies, or defeat bot protection. It opens the official chart in a normal
-browser context and records only successful same-origin timeseries responses
-that the page itself produces.
+cookies, or defeat bot protection. It opens the official chart in a browser
+context and records only successful same-origin timeseries responses that the
+page itself produces.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def download_history(
     asset_class: str = "futures",
     base_url: str = PUBLIC_BARCHART_URL,
     browser_executable: str | None = None,
-    headless: bool = False,
+    headless: bool = True,
     timeout_seconds: float = 120.0,
 ) -> ImportedHistory:
     """Load history from the official interactive chart into memory.
@@ -103,7 +103,7 @@ class BarchartInteractiveChartWorkflow:
 
     base_url: str = PUBLIC_BARCHART_URL
     browser_executable: str | None = None
-    headless: bool = False
+    headless: bool = True
     timeout_seconds: float = 120.0
 
     def interactive_chart_url(
