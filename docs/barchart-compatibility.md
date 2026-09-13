@@ -110,12 +110,12 @@ Barchart's website provides a permitted manual historical-data download for
 eligible accounts. The package does not automate sign-in or the download
 button. Barchart controls the available history window and daily download
 quota by product; consult its [historical-data help](https://help.barchart.com/support/solutions/articles/242748-how-can-i-download-historical-data-).
-The workflow helper makes the handoff explicit:
+The workflow helper is memory-first and makes any persistence explicit:
 
 ~~~
 from barchart_data import BarchartWebsiteWorkflow
 
-workflow = BarchartWebsiteWorkflow(download_dir="downloads")
+workflow = BarchartWebsiteWorkflow()
 url = workflow.open_historical_download_page("ZCU26")
 print(url)
 ~~~
@@ -123,21 +123,28 @@ print(url)
 The browser opens the official historical-download page. The user completes
 any account step and presses Download in the normal Barchart UI. No login
 automation, private endpoint, token replay, proxy rotation, or other bypass is
-part of this package. When the file is present locally:
+part of this package. For an export already held in memory:
 
 ~~~
-imported = workflow.import_latest_csv(symbol="ZCU26")
+imported = workflow.import_text(
+    "Date,Open,High,Low,Last,Volume\n"
+    "2026-08-21,481,486,480,484,2000\n",
+    symbol="ZCU26",
+    source="browser download",
+)
 history = imported.frame
-print(imported.path)
+print(imported.path)  # None: no file was retained
 print(imported.quality.as_dict())
 ~~~
 
-For a browser download started after opening the page, wait_for_csv can watch
-only the local download directory until a stable file appears. The CSV reader
-accepts common website header variants, UTF-8 BOMs, comma/semicolon/tab
+The byte-oriented import_bytes method does the same for downloaded bytes. The
+CSV reader accepts common website header variants, UTF-8 BOMs, comma/semicolon/tab
 delimiters, thousands separators, and retains source fields while adding
 canonical date, open, high, low, close, volume, and openInterest fields where
-available.
+available. import_csv and import_latest_csv remain available when a file is
+intentionally retained. wait_for_csv can watch only an explicitly configured
+local download directory until a stable file appears; no directory is created
+by default.
 
 The dedicated demo is
 notebooks/commodities/barchart_csv_workflow_demo.ipynb. It uses ZCU26 and
@@ -169,18 +176,20 @@ cdp_endpoint="http://127.0.0.1:9222". This is an explicit local connection to
 the user's browser; it does not bypass CloudFront, automate login, or export
 browser credentials.
 
-For a browser that already works normally, download through Barchart's own
-interface and let the package import the result:
+For a browser-assisted, memory-first CSV download, use the chart's own
+interface:
 
 ~~~
-chart = BarchartInteractiveChartWorkflow(download_dir="downloads")
+chart = BarchartInteractiveChartWorkflow()
 imported = chart.download_interactive_csv("ZCU26")
 history = imported.frame
+assert imported.path is None
 ~~~
 
 The method opens the official interactive chart, waits for the user's Download
-action, watches only the local download folder, and returns the normalized
-history with its quality report.
+action, reads the temporary browser artifact into memory, deletes that
+temporary artifact, and returns the normalized history with its quality report.
+Pass save_path to explicitly retain a local copy.
 
 ## Agricultural catalog and relative comparison
 

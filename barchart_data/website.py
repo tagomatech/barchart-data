@@ -20,7 +20,9 @@ import pandas as pd
 from .history import (
     HistoryQualityReport,
     history_quality_report,
+    read_barchart_history_bytes,
     read_barchart_history_csv,
+    read_barchart_history_text,
 )
 
 PUBLIC_BARCHART_URL = "https://www.barchart.com"
@@ -43,24 +45,27 @@ def historical_download_url(
 
 @dataclass(frozen=True)
 class ImportedHistory:
-    """A local export together with its normalized frame and quality report."""
+    """A normalized history with optional local-file provenance."""
 
-    path: Path
+    path: Path | None
     frame: pd.DataFrame
     quality: HistoryQualityReport
+    source: str | None = None
 
 
 @dataclass(frozen=True)
 class BarchartWebsiteWorkflow:
     """Coordinate the user-led website export and local CSV import steps."""
 
-    download_dir: PathLike[str] | str = "downloads"
+    download_dir: PathLike[str] | str | None = None
     base_url: str = PUBLIC_BARCHART_URL
 
     @property
-    def directory(self) -> Path:
-        """Return the configured browser download directory."""
+    def directory(self) -> Path | None:
+        """Return the configured browser download directory, if any."""
 
+        if self.download_dir is None:
+            return None
         return Path(self.download_dir).expanduser()
 
     def historical_download_url(
@@ -102,7 +107,7 @@ class BarchartWebsiteWorkflow:
         """Find local CSV files, newest first, optionally filtered by symbol."""
 
         directory = self.directory
-        if not directory.is_dir():
+        if directory is None or not directory.is_dir():
             return ()
         symbol_token = symbol.casefold() if symbol else None
         matches: list[tuple[float, Path]] = []
@@ -136,6 +141,12 @@ class BarchartWebsiteWorkflow:
         if not matches:
             location = self.directory
             qualifier = f" for {symbol}" if symbol else ""
+            if location is None:
+                raise FileNotFoundError(
+                    f"No Barchart CSV{qualifier} was searched for because "
+                    "download_dir is not configured. Pass an explicit CSV path "
+                    "to import_csv or set download_dir for local-file watching."
+                )
             raise FileNotFoundError(
                 f"No Barchart CSV{qualifier} found in {location}. "
                 "Download it from the official historical-data page first."
@@ -160,6 +171,10 @@ class BarchartWebsiteWorkflow:
 
         if timeout <= 0 or poll_interval <= 0:
             raise ValueError("timeout and poll_interval must be positive")
+        if self.directory is None:
+            raise ValueError(
+                "download_dir is required when waiting for a local browser download"
+            )
         started = time.monotonic()
         observed: dict[Path, tuple[int, int]] = {}
         minimum_mtime = time.time() if since is None else since
@@ -197,6 +212,50 @@ class BarchartWebsiteWorkflow:
         )
         quality = history_quality_report(frame)
         return ImportedHistory(path=path, frame=frame, quality=quality)
+
+    def import_text(
+        self,
+        text: str,
+        *,
+        symbol: str | None = None,
+        sort: bool = True,
+        source: str | None = None,
+    ) -> ImportedHistory:
+        """Parse a Barchart export held in memory without creating a file."""
+
+        frame = read_barchart_history_text(text, symbol=symbol, sort=sort)
+        quality = history_quality_report(frame)
+        return ImportedHistory(
+            path=None,
+            frame=frame,
+            quality=quality,
+            source=source,
+        )
+
+    def import_bytes(
+        self,
+        source: bytes,
+        *,
+        symbol: str | None = None,
+        sort: bool = True,
+        encoding: str = "utf-8-sig",
+        source_name: str | None = None,
+    ) -> ImportedHistory:
+        """Parse an in-memory Barchart download without creating a file."""
+
+        frame = read_barchart_history_bytes(
+            source,
+            symbol=symbol,
+            sort=sort,
+            encoding=encoding,
+        )
+        quality = history_quality_report(frame)
+        return ImportedHistory(
+            path=None,
+            frame=frame,
+            quality=quality,
+            source=source_name,
+        )
 
     def import_latest_csv(
         self,

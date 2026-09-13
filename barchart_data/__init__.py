@@ -23,6 +23,7 @@ from .history import (
     history_quality_report,
     normalize_barchart_history,
     read_barchart_csv,
+    read_barchart_history_bytes,
     read_barchart_history_csv,
     read_barchart_history_text,
 )
@@ -64,9 +65,10 @@ __all__ = [
     "rebase_many",
     "rebase_to_base",
     "read_barchart_csv",
+    "read_barchart_history_bytes",
     "read_barchart_history_csv",
     "read_barchart_history_text",
     "interactive_chart_url",
 ]
 
-__version__ = "0.9.0"
+__version__ = "0.9.1"

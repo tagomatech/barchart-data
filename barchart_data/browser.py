@@ -12,6 +12,7 @@ import time
 import webbrowser
 from dataclasses import dataclass
 from os import PathLike
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
 
@@ -71,7 +72,7 @@ class BarchartInteractiveChartWorkflow:
     workflow remains the supported fallback.
     """
 
-    download_dir: PathLike[str] | str = "downloads"
+    download_dir: PathLike[str] | str | None = None
     base_url: str = PUBLIC_BARCHART_URL
     browser_executable: str | None = None
     cdp_endpoint: str | None = None
@@ -110,30 +111,141 @@ class BarchartInteractiveChartWorkflow:
         *,
         asset_class: str = "futures",
         timeout: float = 180.0,
-        poll_interval: float = 1.0,
+        save_path: PathLike[str] | str | None = None,
     ) -> ImportedHistory:
-        """Open the chart, then import the CSV downloaded through its UI.
+        """Load a CSV downloaded through the chart UI into memory.
 
         The user remains in control of Barchart's chart menus and Download
-        control. This method only watches the configured local download folder
-        and parses the completed file.
+        control. Playwright temporarily receives the browser download so it
+        can be parsed in memory. The temporary artifact is deleted before the
+        method returns. Set save_path, or the legacy download_dir option, to
+        explicitly retain a local copy.
         """
 
-        if timeout <= 0 or poll_interval <= 0:
-            raise ValueError("timeout and poll_interval must be positive")
-        started = time.time()
-        self.open_interactive_chart(symbol, asset_class=asset_class)
-        workflow = BarchartWebsiteWorkflow(
-            download_dir=self.download_dir,
-            base_url=self.base_url,
-        )
-        path = workflow.wait_for_csv(
-            symbol=symbol,
-            since=started,
-            timeout=timeout,
-            poll_interval=poll_interval,
-        )
-        return workflow.import_csv(path, symbol=symbol)
+        if timeout <= 0:
+            raise ValueError("timeout must be positive")
+        if self.timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        try:
+            from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+            from playwright.sync_api import sync_playwright
+        except ImportError as exc:
+            raise BarchartInteractiveChartError(
+                'Install the optional browser dependency with '
+                '"python -m pip install \'barchart-data[browser]\'" '
+                "and then run playwright install chromium."
+            ) from exc
+
+        chart_url = self.interactive_chart_url(symbol, asset_class=asset_class)
+        page_status: int | None = None
+        page_text = ""
+        connected = self.cdp_endpoint is not None
+        try:
+            with sync_playwright() as playwright:
+                launch_kwargs: dict[str, Any] = {"headless": self.headless}
+                if self.browser_executable:
+                    launch_kwargs["executable_path"] = self.browser_executable
+                try:
+                    if connected:
+                        browser = playwright.chromium.connect_over_cdp(
+                            self.cdp_endpoint
+                        )
+                    else:
+                        browser = playwright.chromium.launch(**launch_kwargs)
+                except Exception as exc:
+                    raise BarchartInteractiveChartError(
+                        "Could not start or connect to the optional Playwright "
+                        "browser. Install its browser runtime, set "
+                        "browser_executable, or check cdp_endpoint."
+                    ) from exc
+
+                page = None
+                try:
+                    if connected:
+                        contexts = browser.contexts
+                        if not contexts:
+                            raise BarchartInteractiveChartError(
+                                "The CDP browser has no usable browser context."
+                            )
+                        page = contexts[0].new_page()
+                    else:
+                        page = browser.new_page()
+
+                    response = page.goto(
+                        chart_url,
+                        wait_until="domcontentloaded",
+                        timeout=int(self.timeout_seconds * 1000),
+                    )
+                    page_status = response.status if response else None
+                    page_text = _safe_page_text(page)
+                    if page_status in {401, 403}:
+                        raise BarchartInteractiveChartError(
+                            _access_message(
+                                chart_url,
+                                page_status=page_status,
+                                page_text=page_text,
+                            ),
+                            status_code=page_status,
+                            url=chart_url,
+                        )
+                    download = page.wait_for_event(
+                        "download",
+                        timeout=int(timeout * 1000),
+                    )
+                    try:
+                        temporary_path = download.path()
+                        if temporary_path is None:
+                            raise BarchartInteractiveChartError(
+                                "Barchart reported a download without a readable "
+                                "temporary file."
+                            )
+                        payload = Path(temporary_path).read_bytes()
+                        workflow = BarchartWebsiteWorkflow(base_url=self.base_url)
+                        filename = download.suggested_filename()
+                        target = (
+                            Path(save_path).expanduser()
+                            if save_path is not None
+                            else (
+                                Path(self.download_dir).expanduser() / filename
+                                if self.download_dir is not None
+                                else None
+                            )
+                        )
+                        if target is None:
+                            return workflow.import_bytes(
+                                payload,
+                                symbol=symbol,
+                                source_name=filename,
+                            )
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(payload)
+                        return workflow.import_csv(target, symbol=symbol)
+                    finally:
+                        download.delete()
+                except PlaywrightTimeoutError as exc:
+                    raise BarchartInteractiveChartError(
+                        "No browser download was observed. Set the chart options "
+                        "in Barchart's own UI and press its Download control.",
+                        status_code=page_status,
+                        url=chart_url,
+                    ) from exc
+                finally:
+                    if page is not None:
+                        page.close()
+                    if not connected:
+                        browser.close()
+        except BarchartInteractiveChartError:
+            raise
+        except Exception as exc:
+            raise BarchartInteractiveChartError(
+                _access_message(
+                    chart_url,
+                    page_status=page_status,
+                    page_text=page_text,
+                ),
+                status_code=page_status,
+                url=chart_url,
+            ) from exc
 
     def capture_history(
         self,

@@ -58,7 +58,8 @@ INTERACTIVE_URL = BarchartInteractiveChartWorkflow().interactive_chart_url(CONTR
 # open a browser unexpectedly. OPEN_BROWSER only hands the page to the default
 # browser. CAPTURE_INTERACTIVE_CHART opens an optional Playwright browser and
 # waits for the page's own chart history response. DOWNLOAD_FROM_INTERACTIVE_CHART
-# opens the default browser and waits for a CSV exported through Barchart's UI.
+# opens a visible Playwright browser and loads a CSV exported through Barchart's
+# UI into memory. It does not retain the browser download by default.
 
 # %%
 print(f"Official download page: {DOWNLOAD_URL}")
@@ -92,12 +93,15 @@ if CAPTURE_INTERACTIVE_CHART:
 
 if history is None and DOWNLOAD_FROM_INTERACTIVE_CHART:
     try:
-        imported = BarchartInteractiveChartWorkflow(
-            download_dir=DOWNLOAD_DIR,
-        ).download_interactive_csv(CONTRACT)
+        imported = BarchartInteractiveChartWorkflow().download_interactive_csv(
+            CONTRACT
+        )
         history = imported.frame
         history_source = "CSV exported through the interactive chart UI"
-        print(f"Imported chart export: {imported.path}")
+        print(
+            "Imported chart export in memory: "
+            f"{imported.source or 'Barchart browser download'}"
+        )
     except (FileNotFoundError, TimeoutError) as exc:
         print(f"Interactive CSV export unavailable: {exc}")
         print("Falling back to the local Barchart CSV workflow.")

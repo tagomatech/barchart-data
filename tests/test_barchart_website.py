@@ -1,19 +1,22 @@
 import os
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
 
-from barchart_data.browser import _decode_chart_response
 from barchart_data import (
     BarchartInteractiveChartWorkflow,
     BarchartWebsiteWorkflow,
     history_quality_report,
     interactive_chart_url,
     historical_download_url,
+    read_barchart_history_bytes,
 )
+from barchart_data.browser import _decode_chart_response
 
 
 class BarchartWebsiteWorkflowTests(unittest.TestCase):
@@ -31,9 +34,10 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
 
     def test_interactive_workflow_identifies_same_origin_chart_history(self):
         class Response:
-            url = "https://www.barchart.com/proxies/timeseries/queryeod.ashx"
-            status = 200
-            headers = {"content-type": "text/csv"}
+            def __init__(self):
+                self.url = "https://www.barchart.com/proxies/timeseries/queryeod.ashx"
+                self.status = 200
+                self.headers = {"content-type": "text/csv"}
 
         self.assertTrue(
             BarchartInteractiveChartWorkflow._is_chart_response(
@@ -52,38 +56,124 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
         self.assertEqual(frame["close"].tolist(), [483, 484])
         self.assertEqual(frame["openInterest"].tolist(), [1200, 1300])
 
-    def test_interactive_csv_handoff_opens_page_and_imports_download(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            path = root / "ZCU26-export.csv"
-            path.write_text(
-                "Date,Open,High,Low,Last,Volume\n"
-                "2026-08-21,481,486,480,484,2000\n",
-                encoding="utf-8",
-            )
-            workflow = BarchartInteractiveChartWorkflow(
-                download_dir=root,
-                base_url="https://example.test",
-            )
-            with (
-                patch("barchart_data.browser.webbrowser.open") as open_page,
-                patch(
-                    "barchart_data.browser.BarchartWebsiteWorkflow.wait_for_csv",
-                    return_value=path,
-                ) as wait_for_csv,
-            ):
-                imported = workflow.download_interactive_csv(
-                    "ZCU26",
-                    timeout=2,
-                    poll_interval=0.01,
-                )
-
-        open_page.assert_called_once_with(
-            "https://example.test/futures/quotes/ZCU26/interactive-chart",
-            new=2,
+    def test_in_memory_bytes_import_has_no_path(self):
+        payload = (
+            b"Date,Open,High,Low,Last,Volume\n"
+            b"2026-08-21,481,486,480,484,2000\n"
         )
-        wait_for_csv.assert_called_once()
+
+        imported = BarchartWebsiteWorkflow().import_bytes(
+            payload,
+            symbol="ZCU26",
+            source_name="ZCU26-export.csv",
+        )
+
+        self.assertIsNone(imported.path)
+        self.assertEqual(imported.source, "ZCU26-export.csv")
         self.assertEqual(imported.frame.loc[0, "close"], 484)
+        self.assertEqual(
+            read_barchart_history_bytes(payload, symbol="ZCU26").loc[0, "close"],
+            484,
+        )
+
+    def test_interactive_download_defaults_to_memory(self):
+        class FakeResponse:
+            status = 200
+
+        class FakeDownload:
+            def __init__(self, path):
+                self.path_value = path
+                self.deleted = False
+
+            def path(self):
+                return str(self.path_value)
+
+            def suggested_filename(self):
+                return "ZCU26-export.csv"
+
+            def delete(self):
+                self.deleted = True
+                self.path_value.unlink()
+
+        class FakePage:
+            def __init__(self, download):
+                self.download = download
+                self.closed = False
+
+            def goto(self, url, *, wait_until, timeout):
+                self.url = url
+                return FakeResponse()
+
+            def locator(self, selector):
+                return types.SimpleNamespace(inner_text=lambda timeout: "")
+
+            def wait_for_event(self, event, *, timeout):
+                return self.download
+
+            def close(self):
+                self.closed = True
+
+        class FakeBrowser:
+            def __init__(self, page):
+                self.page = page
+                self.closed = False
+
+            def new_page(self):
+                return self.page
+
+            def close(self):
+                self.closed = True
+
+        class FakeChromium:
+            def __init__(self, browser):
+                self.browser = browser
+
+            def launch(self, **kwargs):
+                return self.browser
+
+        class FakePlaywright:
+            def __init__(self, chromium):
+                self.chromium = chromium
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+        with tempfile.TemporaryDirectory() as directory:
+            download_path = Path(directory) / "temporary.csv"
+            download_path.write_bytes(
+                b"Date,Open,High,Low,Last,Volume\n"
+                b"2026-08-21,481,486,480,484,2000\n"
+            )
+            download = FakeDownload(download_path)
+            page = FakePage(download)
+            browser = FakeBrowser(page)
+            playwright = FakePlaywright(FakeChromium(browser))
+            sync_api = types.ModuleType("playwright.sync_api")
+            sync_api.TimeoutError = TimeoutError
+            sync_api.sync_playwright = lambda: playwright
+            playwright_package = types.ModuleType("playwright")
+            with patch.dict(
+                sys.modules,
+                {
+                    "playwright": playwright_package,
+                    "playwright.sync_api": sync_api,
+                },
+            ):
+                imported = BarchartInteractiveChartWorkflow(
+                    base_url="https://example.test",
+                    timeout_seconds=1,
+                ).download_interactive_csv("ZCU26", timeout=1)
+
+        self.assertIsNone(imported.path)
+        self.assertEqual(imported.source, "ZCU26-export.csv")
+        self.assertEqual(imported.frame.loc[0, "close"], 484)
+        self.assertFalse(download_path.exists())
+        self.assertTrue(download.deleted)
+        self.assertTrue(page.closed)
+        self.assertTrue(browser.closed)
 
     def test_workflow_rejects_path_injection(self):
         with self.assertRaises(ValueError):
@@ -145,9 +235,17 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
         self.assertFalse(report.is_usable)
 
     def test_missing_download_has_actionable_error(self):
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(FileNotFoundError, "Download it"):
-                BarchartWebsiteWorkflow(directory).latest_csv_path(symbol="ZCU26")
+        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(
+            FileNotFoundError, "Download it"
+        ):
+            BarchartWebsiteWorkflow(directory).latest_csv_path(symbol="ZCU26")
+
+    def test_default_workflow_does_not_configure_a_download_directory(self):
+        workflow = BarchartWebsiteWorkflow()
+
+        self.assertIsNone(workflow.directory)
+        with self.assertRaisesRegex(FileNotFoundError, "download_dir"):
+            workflow.latest_csv_path(symbol="ZCU26")
 
     def test_wait_for_csv_returns_a_stable_local_file(self):
         with tempfile.TemporaryDirectory() as directory:

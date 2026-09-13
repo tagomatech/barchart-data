@@ -42,8 +42,8 @@ publisher for owner tagomatech, repository barchart-data, workflow
 version tag:
 
 ~~~powershell
-git tag v0.9.0
-git push origin v0.9.0
+git tag v0.9.1
+git push origin v0.9.1
 ~~~
 
 ## Access model
@@ -77,34 +77,35 @@ regular research jobs.
 
 ## Website CSV workflow
 
-The website-supported workflow is manual and auditable:
+The website-supported workflow is manual and auditable. Parsing is
+memory-first; the package does not create a downloads folder or retain a file
+unless you explicitly provide a path.
 
 1. Open the instrument's Barchart historical-data page.
 2. Select the permitted frequency and date range, then use Barchart's
    Download control.
-3. Read the downloaded file locally:
+3. Import the downloaded bytes or file:
 
 ~~~python
 from barchart_data import BarchartWebsiteWorkflow
 
-workflow = BarchartWebsiteWorkflow(download_dir="downloads")
+workflow = BarchartWebsiteWorkflow()
 url = workflow.open_historical_download_page("ZCU26")
 print(f"Open this page and press Download: {url}")
 
-# Or omit the browser handoff and open the URL yourself.
-imported = workflow.import_latest_csv(symbol="ZCU26")
+# Use an exact path when you intentionally keep the browser export.
+imported = workflow.import_csv("C:/research/ZCU26.csv", symbol="ZCU26")
 history = imported.frame
 print(imported.path)
 print(imported.quality.as_dict())
 ~~~
 
 The workflow opens only the official page in your browser. You complete any
-account step and press Barchart's Download control yourself. It can then find
-the newest matching local CSV, wait for a browser download to finish, preserve
-source columns, add canonical date/OHLCV fields, and report duplicates and
-missing values. It performs no login, private-endpoint request, or network
-operation during import. The lower-level read_barchart_history_csv function
-remains available when an exact path is preferred.
+account step and press Barchart's Download control yourself. The lower-level
+read_barchart_history_text and read_barchart_history_bytes helpers parse data
+already held in memory. import_csv and import_latest_csv remain available for
+intentional local-file workflows; wait_for_csv requires an explicit
+download_dir and never creates one by default.
 
 ## Interactive chart workflow
 
@@ -149,19 +150,32 @@ This CDP mode attaches only to the browser endpoint you explicitly provide. It
 does not export cookies, passwords, or tokens, and it does not solve a
 Barchart entitlement or CloudFront denial.
 
-For the most conservative path, use the browser you already use manually and
-let the package watch its download folder:
+For a browser-assisted, memory-first download, install the optional browser
+extra. The method opens the official interactive chart in a visible Playwright
+browser, waits for you to choose chart settings and press Barchart's own
+Download control, then reads the temporary browser artifact into memory:
 
 ~~~python
-chart = BarchartInteractiveChartWorkflow(download_dir="downloads")
+chart = BarchartInteractiveChartWorkflow()
 imported = chart.download_interactive_csv("ZCU26")
 history = imported.frame
+assert imported.path is None
 ~~~
 
-This opens the official interactive chart in the default browser, waits for
-you to choose the chart settings and press Barchart's own Download control,
-then imports and quality-checks the completed local CSV. Set download_dir to
-the browser's actual download directory.
+The temporary artifact is deleted after parsing. To retain a copy, opt in
+explicitly:
+
+~~~python
+imported = chart.download_interactive_csv(
+    "ZCU26",
+    save_path="C:/research/ZCU26.csv",
+)
+print(imported.path)
+~~~
+
+If you prefer your normal browser, configure its download directory explicitly
+and use BarchartWebsiteWorkflow.wait_for_csv followed by import_csv. That
+legacy watcher never runs unless download_dir is supplied.
 
 While the browser is open, use Barchart's own controls if you need a different
 range or interval. The package accepts only a readable successful response
@@ -189,7 +203,8 @@ the demo extra.
 The supported website workflow is demonstrated end to end in
 notebooks/commodities/barchart_csv_workflow_demo.ipynb. It uses the actual
 ZCU26 contract, shows the source-file audit, and renders candlesticks,
-volume, RSI, Bollinger Bands, and ATR after a local CSV download.
+volume, RSI, Bollinger Bands, and ATR after an explicitly retained local CSV
+download.
 
 The broader agriculture portfolio example is in
 notebooks/commodities/agriculture_portfolio_demo.ipynb. It covers current

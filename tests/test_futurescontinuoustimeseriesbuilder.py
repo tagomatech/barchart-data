@@ -6,8 +6,8 @@ import pandas as pd
 
 from Barchart.futurescontinuoustimeseriesbuilder import (
     DEFAULT_ROOT_CYCLES,
-    ContractCycle,
     ContinuousFuturesBuilder,
+    ContractCycle,
     canonical_symbol,
     month_letters_to_nums,
     parse_symbol,

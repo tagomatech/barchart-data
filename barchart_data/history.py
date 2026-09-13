@@ -154,6 +154,30 @@ def read_barchart_history_text(
     return normalize_barchart_history(raw, symbol=symbol, sort=sort)
 
 
+def read_barchart_history_bytes(
+    source: bytes,
+    *,
+    symbol: str | None = None,
+    sort: bool = True,
+    encoding: str = "utf-8-sig",
+) -> pd.DataFrame:
+    """Read an in-memory Barchart history export.
+
+    This is the byte-oriented counterpart to read_barchart_history_text and
+    is useful for browser downloads that should not be retained on disk.
+    """
+
+    if not isinstance(source, bytes) or not source:
+        raise BarchartDecodeError("Barchart history download is empty.")
+    try:
+        text = source.decode(encoding)
+    except UnicodeDecodeError as exc:
+        raise BarchartDecodeError(
+            f"Could not decode Barchart history bytes using {encoding!r}."
+        ) from exc
+    return read_barchart_history_text(text, symbol=symbol, sort=sort)
+
+
 def history_quality_report(
     frame: pd.DataFrame,
     *,
@@ -318,6 +342,7 @@ __all__ = [
     "history_quality_report",
     "normalize_barchart_history",
     "read_barchart_csv",
+    "read_barchart_history_bytes",
     "read_barchart_history_csv",
     "read_barchart_history_text",
 ]
