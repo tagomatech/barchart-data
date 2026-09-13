@@ -1,13 +1,12 @@
 """Credential-free Barchart market-data and analysis utilities.
 
 The public client reads data exposed by Barchart quote pages without an API
-key or login. Historical CSV files downloaded through Barchart can be parsed
-locally with the history helpers.
+key or login. Historical chart data is captured from the official interactive
+chart and loaded into memory.
 """
 
 from .browser import (
-    BarchartInteractiveChartWorkflow,
-    CapturedChartHistory,
+    download_history,
     interactive_chart_url,
 )
 from .catalog import (
@@ -35,7 +34,6 @@ from .history import (
 from .normalization import rebase_frame, rebase_many, rebase_to_base
 from .public import BarchartPublicClient, PublicBarchartClient, PublicWebClient
 from .website import (
-    BarchartWebsiteWorkflow,
     ImportedHistory,
     historical_download_url,
 )
@@ -45,12 +43,9 @@ __all__ = [
     "BarchartDataError",
     "BarchartDecodeError",
     "BarchartInteractiveChartError",
-    "BarchartInteractiveChartWorkflow",
     "BarchartPublicClient",
     "BarchartPublicPageError",
     "BarchartTransportError",
-    "BarchartWebsiteWorkflow",
-    "CapturedChartHistory",
     "CommodityRoot",
     "HistoryQualityReport",
     "ImportedHistory",
@@ -58,6 +53,7 @@ __all__ = [
     "PublicWebClient",
     "agricultural_catalog",
     "catalog_frame",
+    "download_history",
     "historical_download_url",
     "history_quality_report",
     "interactive_chart_url",
@@ -71,4 +67,4 @@ __all__ = [
     "rebase_to_base",
 ]
 
-__version__ = "0.9.1"
+__version__ = "0.9.2"

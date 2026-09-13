@@ -1,233 +1,113 @@
 # barchart-data
 
-An installable Python toolkit for Barchart market data. It reads public quote
-pages, can capture history naturally loaded by the official interactive chart
-in a normal browser session, and parses historical CSV files downloaded through
-the Barchart website. The package never automates sign-in or stores credentials.
+An installable Python client for Barchart public market data. The project is
+commodity-focused and is designed to grow to other asset classes and data
+families without storing credentials or downloaded market data.
 
-The package is designed for commodity research first, while keeping its public
-asset-class handling extensible to equities, funds, currencies, and other
-instruments.
+## Install
 
-## Install from GitHub
+Use the repository version directly. This is the one supported installation
+for the browser history client:
 
 ~~~powershell
-python -m pip install "git+https://github.com/tagomatech/barchart-data.git"
+py -3.13 -m pip install --upgrade --force-reinstall "barchart-data[demo,browser] @ git+https://github.com/tagomatech/barchart-data.git@main"
+py -3.13 -m playwright install chromium
 ~~~
 
-For the notebook and Screamer indicators:
+Confirm that Python is importing the GitHub checkout:
 
 ~~~powershell
-python -m pip install "barchart-data[demo] @ git+https://github.com/tagomatech/barchart-data.git"
+py -3.13 -c "import barchart_data; print(barchart_data.__version__); print(barchart_data.__file__)"
 ~~~
 
-For local development:
+## Historical data
 
-~~~powershell
-python -m pip install -e ".[dev,demo]"
+There is one historical acquisition method. The package opens the official
+Barchart interactive chart in a visible Playwright browser and observes the
+history response that the page naturally requests. The response is normalized
+in memory and the browser is closed automatically.
+
+~~~python
+from barchart_data import download_history
+
+result = download_history("ZCU26")
+history = result.frame
+
+print(history.tail())
+print(result.source)
+assert result.path is None
 ~~~
 
-For the optional browser-assisted chart capture:
+No Download button needs to be pressed. No file is created by default. The
+chart's own default range and interval are used, and the returned source URL
+provides provenance for the captured response.
 
-~~~powershell
-python -m pip install -e ".[browser]"
-playwright install chromium
+This is browser automation of the official page, not an attempt to bypass
+Barchart controls. The package does not automate sign-in, replay tokens,
+rotate proxies, or call a separate anonymous historical endpoint. If
+Barchart/CloudFront denies the browser session, the function raises
+BarchartInteractiveChartError; that restriction cannot be bypassed by this
+package.
+
+The same function accepts another public Barchart asset class:
+
+~~~python
+result = download_history("AAPL", asset_class="stocks")
 ~~~
 
-The repository is also configured for tokenless PyPI publication through
-GitHub Actions. The GitHub install above works immediately. To enable the
-standard command python -m pip install barchart-data, create a PyPI trusted
-publisher for owner tagomatech, repository barchart-data, workflow
-.github/workflows/publish.yml, and environment pypi. Then publish a
-version tag:
+## Public quote data
 
-~~~powershell
-git tag v0.9.1
-git push origin v0.9.1
-~~~
-
-## Access model
-
-The public client reads quote and instrument JSON embedded in Barchart
-overview pages. Quotes and profiles do not require a Barchart account, API
-key, or login.
+Public quote and profile fields embedded in overview pages are available
+without a login:
 
 ~~~python
 from barchart_data import PublicBarchartClient
 
 client = PublicBarchartClient()
-corn_quote = client.quote("ZCU26")
-corn_profile = client.profile("ZCU26")
+quote = client.quote("ZCU26")
+profile = client.profile("ZCU26")
 ~~~
 
-The public adapter is limited to quote/profile fields embedded in public
-overview pages. Historical data is not fetched through a separately scripted
-anonymous endpoint because Barchart can deny that route with HTTP 401/403.
-The interactive-chart workflow below uses the page itself when a normal browser
-session receives chart data. Otherwise, download a CSV from the Barchart
-historical-data page using an account and plan that permits it.
-The available lookback window and download quota depend on the Barchart
-product and can change; see the [official download help](https://help.barchart.com/support/solutions/articles/242748-how-can-i-download-historical-data-).
+Requests are deliberately paced and overview pages are cached briefly. Reuse
+one client instance for a research job and keep the default request interval
+or increase it for larger jobs.
 
-The public client spaces uncached requests by one second, caches overview pages
-for five minutes, and honors Barchart's Retry-After response when retrying
-transient errors. Increase min_request_interval or use a longer page_cache_ttl
-for a longer-lived process. Keep the defaults, or use a longer interval, for
-regular research jobs.
+## Analysis and demos
 
-## Website CSV workflow
+The package includes:
 
-The website-supported workflow is manual and auditable. Parsing is
-memory-first; the package does not create a downloads folder or retain a file
-unless you explicitly provide a path.
-
-1. Open the instrument's Barchart historical-data page.
-2. Select the permitted frequency and date range, then use Barchart's
-   Download control.
-3. Import the downloaded bytes or file:
-
-~~~python
-from barchart_data import BarchartWebsiteWorkflow
-
-workflow = BarchartWebsiteWorkflow()
-url = workflow.open_historical_download_page("ZCU26")
-print(f"Open this page and press Download: {url}")
-
-# Use an exact path when you intentionally keep the browser export.
-imported = workflow.import_csv("C:/research/ZCU26.csv", symbol="ZCU26")
-history = imported.frame
-print(imported.path)
-print(imported.quality.as_dict())
-~~~
-
-The workflow opens only the official page in your browser. You complete any
-account step and press Barchart's Download control yourself. The lower-level
-read_barchart_history_text and read_barchart_history_bytes helpers parse data
-already held in memory. import_csv and import_latest_csv remain available for
-intentional local-file workflows; wait_for_csv requires an explicit
-download_dir and never creates one by default.
-
-## Interactive chart workflow
-
-The interactive page is the authoritative place where Barchart applies its
-chart menus, frequency, range, and entitlement rules. The optional workflow
-opens that page in a visible Playwright browser and listens for a successful
-same-origin history response that the page naturally makes:
-
-~~~python
-from barchart_data import BarchartInteractiveChartWorkflow
-
-chart = BarchartInteractiveChartWorkflow(
-    browser_executable=None,  # or the path to an installed Chrome/Edge
-    headless=False,
-    timeout_seconds=120,
-)
-captured = chart.capture_history("ZCU26")
-history = captured.frame
-print(captured.response_url)
-print(captured.quality.as_dict())
-~~~
-
-If a fresh Playwright browser receives CloudFront 403 but the chart works in a
-browser you started yourself, launch that browser with a local DevTools port
-and opt in explicitly:
-
-~~~powershell
-& "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe" --remote-debugging-port=9222 --user-data-dir="$env:TEMP/barchart-data-browser"
-~~~
-
-Open the chart in that window, then capture through its normal visible session:
-
-~~~python
-chart = BarchartInteractiveChartWorkflow(
-    cdp_endpoint="http://127.0.0.1:9222",
-    headless=False,
-)
-captured = chart.capture_history("ZCU26")
-~~~
-
-This CDP mode attaches only to the browser endpoint you explicitly provide. It
-does not export cookies, passwords, or tokens, and it does not solve a
-Barchart entitlement or CloudFront denial.
-
-For a browser-assisted, memory-first download, install the optional browser
-extra. The method opens the official interactive chart in a visible Playwright
-browser, waits for you to choose chart settings and press Barchart's own
-Download control, then reads the temporary browser artifact into memory:
-
-~~~python
-chart = BarchartInteractiveChartWorkflow()
-imported = chart.download_interactive_csv("ZCU26")
-history = imported.frame
-assert imported.path is None
-~~~
-
-The temporary artifact is deleted after parsing. To retain a copy, opt in
-explicitly:
-
-~~~python
-imported = chart.download_interactive_csv(
-    "ZCU26",
-    save_path="C:/research/ZCU26.csv",
-)
-print(imported.path)
-~~~
-
-If you prefer your normal browser, configure its download directory explicitly
-and use BarchartWebsiteWorkflow.wait_for_csv followed by import_csv. That
-legacy watcher never runs unless download_dir is supplied.
-
-While the browser is open, use Barchart's own controls if you need a different
-range or interval. The package accepts only a readable successful response
-from the official page and does not call an undocumented endpoint, replay
-tokens, rotate proxies, automate login, or bypass CloudFront. If Barchart
-returns a verification or 401/403 response, the method raises
-`BarchartInteractiveChartError`; use the official CSV workflow instead.
-
-## Commodity utilities
-
-The compatibility Barchart package contains:
-
-- a typed public quote/profile adapter for overview pages;
-- a supported local importer for Barchart historical CSV downloads;
-- contract-aware continuous-series construction with auditable roll segments;
-- a catalog of grains, oilseeds, livestock, ICE Canada, Euronext Matif, and
-  Barchart's palm-oil-related roots;
+- OHLCV normalization and quality reports;
+- a catalog of grains, oilseeds, livestock, vegetable oils, ICE Canada, and
+  Euronext Matif roots;
+- contract-aware nearby and continuous-futures utilities;
 - rebasing and comparison helpers;
-- a CME/CBOT September 2026 Corn notebook using real OHLCV data and Screamer
-  indicators.
+- Screamer indicators for streaming-style analysis.
 
-Open notebooks/commodities/corn_futures_demo.ipynb in Jupyter or VS Code after installing
-the demo extra.
+The main demonstration is
+notebooks/commodities/corn_futures_demo.ipynb. It uses the real CME/CBOT
+September 2026 Corn contract, ZCU26, and renders candlesticks, volume,
+Bollinger Bands, ATR, RSI, and a rolling volume mean.
 
-The supported website workflow is demonstrated end to end in
-notebooks/commodities/barchart_csv_workflow_demo.ipynb. It uses the actual
-ZCU26 contract, shows the source-file audit, and renders candlesticks,
-volume, RSI, Bollinger Bands, and ATR after an explicitly retained local CSV
-download.
+The agriculture comparison is in
+notebooks/commodities/agriculture_portfolio_demo.ipynb. The equity example is
+in notebooks/equities/equity_research_demo.ipynb. These notebooks are
+analysis demonstrations; the single historical downloader above is the
+source-ingestion path.
 
-The broader agriculture portfolio example is in
-notebooks/commodities/agriculture_portfolio_demo.ipynb. It covers current
-first-nearby contracts across grains, oilseeds, livestock, vegetable oils,
-ICE Canada, and Euronext Matif, plus rebased market-group comparisons.
-
-The equity research example is in
-notebooks/equities/equity_research_demo.ipynb. It covers public AAPL page
-fields, local CSV history, the Barchart S&P 500 index, dividend-adjustment
-effects, Screamer indicators, risk metrics, and a small example portfolio.
+The legacy Barchart package remains under Barchart for compatibility with the
+original futures-builder imports. New code should import from barchart_data.
 
 ## Tests
 
 ~~~powershell
-python -m unittest discover -s tests -v
+py -3.13 -m unittest discover -s tests -v
 ~~~
 
 ## Contributions
 
-Contributions are welcome. Please open an issue or pull request for bug fixes,
-new data resources, additional asset classes, notebook ideas, and
-documentation improvements. Run both test commands above before submitting a
-change, and do not commit credentials or downloaded market data.
+Contributions are welcome. Issues and pull requests are useful for bug fixes,
+new asset classes, notebook ideas, documentation, and compatibility reports.
+Please do not commit credentials or downloaded market data.
 
 ## Data rights
 

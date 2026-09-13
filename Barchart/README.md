@@ -11,5 +11,6 @@ and normalization helpers:
 from Barchart import ContinuousFuturesBuilder, agricultural_catalog
 ~~~
 
-Historical Barchart data is imported through the root package's supported
-manual CSV workflow. No automated historical endpoint client is included.
+Historical Barchart data is captured by the root package from the official
+interactive chart response. No separate anonymous historical endpoint client,
+login automation, or browser-download workflow is included.

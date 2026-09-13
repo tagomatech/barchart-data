@@ -40,7 +40,7 @@ from Barchart import (
     rebase_frame,
     rebase_many,
 )
-from barchart_data import BarchartWebsiteWorkflow
+from barchart_data.website import BarchartWebsiteWorkflow
 
 START_DATE = "2024-01-01"
 END_DATE = None

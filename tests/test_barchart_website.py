@@ -4,19 +4,23 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import patch
 
 import pandas as pd
 
 from barchart_data import (
-    BarchartInteractiveChartWorkflow,
-    BarchartWebsiteWorkflow,
+    download_history,
     historical_download_url,
     history_quality_report,
     interactive_chart_url,
     read_barchart_history_bytes,
 )
-from barchart_data.browser import _decode_chart_response
+from barchart_data.browser import (
+    BarchartInteractiveChartWorkflow,
+    _decode_chart_response,
+)
+from barchart_data.website import BarchartWebsiteWorkflow
 
 
 class BarchartWebsiteWorkflowTests(unittest.TestCase):
@@ -76,46 +80,39 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
             484,
         )
 
-    def test_interactive_download_defaults_to_memory(self):
+    def test_download_history_automatically_captures_chart_response(self):
         class FakeResponse:
+            url = "https://example.test/proxies/timeseries/queryeod.ashx"
             status = 200
+            headers: ClassVar = {"content-type": "application/json"}
 
-        class FakeDownload:
-            def __init__(self, path):
-                self.path_value = path
-                self.deleted = False
-
-            def path(self):
-                return str(self.path_value)
-
-            def suggested_filename(self):
-                return "ZCU26-export.csv"
-
-            def delete(self):
-                self.deleted = True
-                self.path_value.unlink()
+            def text(self):
+                return (
+                    '[["ZCU26","2026-08-21",481,486,480,484,2000,1300]]'
+                )
 
         class FakePage:
-            def __init__(self, download):
-                self.download = download
-                self.closed = False
+            def __init__(self):
+                self.callbacks = []
 
             def goto(self, url, *, wait_until, timeout):
                 self.url = url
+                for callback in self.callbacks:
+                    callback(FakeResponse())
                 return FakeResponse()
 
             def locator(self, selector):
                 return types.SimpleNamespace(inner_text=lambda timeout: "")
 
-            def wait_for_event(self, event, *, timeout):
-                return self.download
+            def on(self, event, callback):
+                self.callbacks.append(callback)
 
-            def close(self):
-                self.closed = True
+            def wait_for_timeout(self, timeout):
+                return None
 
         class FakeBrowser:
-            def __init__(self, page):
-                self.page = page
+            def __init__(self):
+                self.page = FakePage()
                 self.closed = False
 
             def new_page(self):
@@ -124,12 +121,11 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
             def close(self):
                 self.closed = True
 
-        class FakeChromium:
-            def __init__(self, browser):
-                self.browser = browser
+        browser = FakeBrowser()
 
+        class FakeChromium:
             def launch(self, **kwargs):
-                return self.browser
+                return browser
 
         class FakePlaywright:
             def __init__(self, chromium):
@@ -141,38 +137,32 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
             def __exit__(self, exc_type, exc_value, traceback):
                 return False
 
-        with tempfile.TemporaryDirectory() as directory:
-            download_path = Path(directory) / "temporary.csv"
-            download_path.write_bytes(
-                b"Date,Open,High,Low,Last,Volume\n"
-                b"2026-08-21,481,486,480,484,2000\n"
+        browser = FakeBrowser()
+        playwright = FakePlaywright(FakeChromium())
+        sync_api = types.ModuleType("playwright.sync_api")
+        sync_api.Error = Exception
+        sync_api.TimeoutError = TimeoutError
+        sync_api.sync_playwright = lambda: playwright
+        playwright_package = types.ModuleType("playwright")
+        with patch.dict(
+            sys.modules,
+            {
+                "playwright": playwright_package,
+                "playwright.sync_api": sync_api,
+            },
+        ):
+            imported = download_history(
+                "ZCU26",
+                base_url="https://example.test",
+                timeout_seconds=1,
             )
-            download = FakeDownload(download_path)
-            page = FakePage(download)
-            browser = FakeBrowser(page)
-            playwright = FakePlaywright(FakeChromium(browser))
-            sync_api = types.ModuleType("playwright.sync_api")
-            sync_api.TimeoutError = TimeoutError
-            sync_api.sync_playwright = lambda: playwright
-            playwright_package = types.ModuleType("playwright")
-            with patch.dict(
-                sys.modules,
-                {
-                    "playwright": playwright_package,
-                    "playwright.sync_api": sync_api,
-                },
-            ):
-                imported = BarchartInteractiveChartWorkflow(
-                    base_url="https://example.test",
-                    timeout_seconds=1,
-                ).download_interactive_csv("ZCU26", timeout=1)
 
         self.assertIsNone(imported.path)
-        self.assertEqual(imported.source, "ZCU26-export.csv")
+        self.assertEqual(
+            imported.source,
+            "https://example.test/proxies/timeseries/queryeod.ashx",
+        )
         self.assertEqual(imported.frame.loc[0, "close"], 484)
-        self.assertFalse(download_path.exists())
-        self.assertTrue(download.deleted)
-        self.assertTrue(page.closed)
         self.assertTrue(browser.closed)
 
     def test_workflow_rejects_path_injection(self):

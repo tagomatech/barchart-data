@@ -44,10 +44,8 @@ from IPython.display import display
 from matplotlib.patches import Rectangle
 from screamer import ATR, BollingerBands, RollingMean, RollingRSI
 
-from barchart_data import (
-    BarchartWebsiteWorkflow,
-    PublicBarchartClient,
-)
+from barchart_data import PublicBarchartClient
+from barchart_data.website import BarchartWebsiteWorkflow
 
 EQUITY = "AAPL"
 BENCHMARK = "$SPX"
