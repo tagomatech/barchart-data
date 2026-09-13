@@ -249,7 +249,7 @@ class BarchartInteractiveChartWorkflow:
 
         try:
             playwright = sync_playwright().start()
-        except Exception as exc:  # noqa: BLE001 - convert startup failures to API errors
+        except Exception as exc:
             logger.error("Browser session could not be started")
             raise BarchartInteractiveChartError(
                 "Could not run the optional Playwright browser session.",
