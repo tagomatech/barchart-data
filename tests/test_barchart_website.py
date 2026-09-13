@@ -1,9 +1,9 @@
+import asyncio
 import os
 import sys
 import tempfile
 import types
 import unittest
-import asyncio
 from pathlib import Path
 from typing import ClassVar
 from unittest.mock import patch
