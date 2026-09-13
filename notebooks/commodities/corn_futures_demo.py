@@ -4,9 +4,10 @@
 # # CME/CBOT Corn Sep 2026 (ZCU26)
 #
 # This notebook focuses on one real, tradable contract. It reads the
-# historical OHLCV and open-interest data naturally loaded by the official
-# interactive chart, draws candlesticks, and adds causal streaming indicators
-# from Screamer.
+# historical OHLCV data from Barchart when the chart is available and uses a
+# public exact-contract fallback after a Barchart 401/403 or browser-session
+# failure. It draws
+# candlesticks and adds causal streaming indicators from Screamer.
 #
 # The chart uses only actual data for this named contract. It does not stitch
 # multiple contracts together, so ZCU26 remains the same contract throughout.
@@ -48,9 +49,10 @@ INTERACTIVE_URL = interactive_chart_url(CONTRACT)
 # %% [markdown]
 # ## 1. Source page
 #
-# Running this cell uses one headless Playwright browser session. The
-# downloader waits for the chart page's own history response and returns it in
-# memory without displaying a browser window.
+# Running this cell uses one headless Playwright browser session when Barchart
+# is available. A Barchart 401/403 or notebook browser-session failure
+# automatically switches to one public exact-contract request, still without
+# displaying a browser window.
 
 # %%
 print(f"Official interactive chart: {INTERACTIVE_URL}")
@@ -58,20 +60,21 @@ print(f"Official interactive chart: {INTERACTIVE_URL}")
 # %% [markdown]
 # ## 2. Fetch actual Barchart data
 #
-# The chart's default range and interval are used. No Download control is
-# pressed, no local file is created, and the browser is closed after the page
-# response has been normalized.
+# The chart's default range and interval are used when Barchart is available.
+# The fallback returns the daily history exposed for this exact contract. No
+# Download control is pressed, no local file is created, and the browser is
+# closed after the page response has been normalized.
 
 # %%
 try:
     imported = download_history(CONTRACT, timeout_seconds=120)
 except BarchartInteractiveChartError as exc:
     raise RuntimeError(
-        "Barchart did not expose chart history to this browser session. "
-        "Check that the official chart is available from this network and try again."
+        "Neither Barchart nor the public exact-contract feed exposed history. "
+        "Check the symbol and network, then try again."
     ) from exc
 
-history_source = f"automatic chart response: {imported.source}"
+history_source = f"automatic source: {imported.source}"
 history = imported.frame
 if history.empty:
     raise ValueError(f"No Barchart rows returned for {CONTRACT}.")
@@ -145,7 +148,8 @@ display(summary)
 # - Volume mean: 20-session rolling average of volume.
 #
 # Non-positive open-interest values are treated as missing in the display
-# because Barchart can use zero as an unavailable-value sentinel.
+# because Barchart can use zero as an unavailable-value sentinel. The public
+# fallback does not publish open interest, so that column is simply absent.
 
 # %%
 navy = "#13233A"
@@ -221,7 +225,7 @@ axes[0].plot(
     label="Bollinger lower",
 )
 axes[0].set_title(
-    "Barchart live | CBOT Corn | ZCU26 | September 2026",
+    "CBOT Corn | ZCU26 | September 2026",
     loc="left",
     color="white",
     fontsize=16,
@@ -332,4 +336,4 @@ display(recent)
 # RSI, and rolling volume mean.
 #
 # The package does not store credentials, automate sign-in, click chart
-# controls, or save the captured response to disk.
+# controls, disguise automation, or save the captured response to disk.

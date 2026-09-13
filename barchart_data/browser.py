@@ -16,7 +16,11 @@ from urllib.parse import quote, urlsplit
 
 import pandas as pd
 
-from .exceptions import BarchartDecodeError, BarchartInteractiveChartError
+from .exceptions import (
+    BarchartDecodeError,
+    BarchartInteractiveChartError,
+    PublicChartError,
+)
 from .history import (
     HistoryQualityReport,
     history_quality_report,
@@ -28,6 +32,7 @@ from .website import (
     _validated_base_url,
     _validated_segment,
 )
+from .yahoo import _download_yahoo_futures_history
 
 _LOGGER = logging.getLogger(__name__)
 _VERBOSITY_LEVELS = {
@@ -89,16 +94,51 @@ def download_history(
     The chart page makes the history request itself. This function observes
     that successful same-origin response, parses it, and closes the browser.
     It does not click controls, save files, automate sign-in, or call a
-    separate historical endpoint.
+    separate Barchart historical endpoint. A futures browser denial or startup
+    failure uses the public exact-contract fallback.
     """
 
-    captured = BarchartInteractiveChartWorkflow(
-        base_url=base_url,
-        browser_executable=browser_executable,
-        headless=headless,
-        timeout_seconds=timeout_seconds,
-        verbosity=verbosity,
-    ).capture_history(symbol, asset_class=asset_class)
+    try:
+        captured = BarchartInteractiveChartWorkflow(
+            base_url=base_url,
+            browser_executable=browser_executable,
+            headless=headless,
+            timeout_seconds=timeout_seconds,
+            verbosity=verbosity,
+        ).capture_history(symbol, asset_class=asset_class)
+    except BarchartInteractiveChartError as error:
+        if asset_class.casefold() != "futures":
+            raise
+        logger = _configure_logging(verbosity)
+        if error.status_code in {401, 403}:
+            logger.warning(
+                "Barchart returned HTTP %s; using the public exact-contract "
+                "futures chart feed. This fallback does not bypass Barchart.",
+                error.status_code,
+            )
+        else:
+            logger.warning(
+                "Barchart browser session was unavailable; using the public "
+                "exact-contract futures chart feed. This fallback does not "
+                "bypass Barchart."
+            )
+        try:
+            imported = _download_yahoo_futures_history(
+                symbol,
+                timeout_seconds=min(timeout_seconds, 30.0),
+            )
+        except PublicChartError as fallback_error:
+            logger.error("Public exact-contract fallback failed: %s", fallback_error)
+            raise error from fallback_error
+        logger.info(
+            "History captured from public exact-contract feed: rows=%d "
+            "start=%s end=%s source=%s",
+            imported.quality.rows,
+            imported.quality.start_date,
+            imported.quality.end_date,
+            imported.source,
+        )
+        return imported
     return ImportedHistory(
         path=None,
         frame=captured.frame,
@@ -207,7 +247,15 @@ class BarchartInteractiveChartWorkflow:
                 return
             candidates.append((response, body))
 
-        with sync_playwright() as playwright:
+        try:
+            playwright = sync_playwright().start()
+        except Exception as exc:  # noqa: BLE001 - convert startup failures to API errors
+            logger.error("Browser session could not be started")
+            raise BarchartInteractiveChartError(
+                "Could not run the optional Playwright browser session.",
+                url=chart_url,
+            ) from exc
+        try:
             launch_kwargs: dict[str, Any] = {"headless": self.headless}
             if self.browser_executable:
                 launch_kwargs["executable_path"] = self.browser_executable
@@ -304,6 +352,8 @@ class BarchartInteractiveChartWorkflow:
                 logger.debug("Closing browser session")
                 browser.close()
                 logger.debug("Browser session closed")
+        finally:
+            playwright.stop()
 
         message = _access_message(
             chart_url,

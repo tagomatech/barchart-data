@@ -21,6 +21,7 @@ from .exceptions import (
     BarchartInteractiveChartError,
     BarchartPublicPageError,
     BarchartTransportError,
+    PublicChartError,
 )
 from .history import (
     HistoryQualityReport,
@@ -50,6 +51,7 @@ __all__ = [
     "HistoryQualityReport",
     "ImportedHistory",
     "PublicBarchartClient",
+    "PublicChartError",
     "PublicWebClient",
     "agricultural_catalog",
     "catalog_frame",
@@ -67,4 +69,4 @@ __all__ = [
     "rebase_to_base",
 ]
 
-__version__ = "0.9.5"
+__version__ = "0.10.0"

@@ -22,11 +22,18 @@ py -3.13 -c "import barchart_data; print(barchart_data.__version__); print(barch
 
 ## Historical data
 
-There is one historical acquisition method. The package opens the official
-Barchart interactive chart in a headless browser session and observes the
-history response that the page naturally requests. No browser window is
-displayed. The response is normalized in memory and the browser is closed
-automatically.
+There is one historical acquisition call. It first opens the official Barchart
+interactive chart in a headless browser session and observes the history
+response that the page naturally requests. No browser window is displayed. The
+response is normalized in memory and the browser is closed automatically.
+
+If Barchart returns HTTP 401 or 403, or the browser session cannot run (for
+example inside a notebook's active asyncio loop), the same call automatically
+reads the exact futures contract from Yahoo Finance's public chart feed. For
+example, Barchart symbol ZCU26 is mapped to Yahoo symbol ZCU26.CBT. This is a
+non-Barchart fallback, and the returned source URL makes that provenance
+visible. It is not a continuous series and it does not silently combine
+different contracts.
 
 The default uses Playwright's Chromium channel, which explicitly selects
 Chrome's newer headless implementation rather than the legacy headless shell.
@@ -43,8 +50,9 @@ assert result.path is None
 ~~~
 
 No Download button needs to be pressed. No file is created by default. The
-chart's own default range and interval are used, and the returned source URL
-provides provenance for the captured response.
+chart's own default range and interval are used when Barchart is available.
+The public fallback requests the complete daily range exposed for that exact
+contract. In both cases, the returned source URL provides provenance.
 
 Progress is printed to the terminal in real time. Maximum verbosity is the
 default:
@@ -59,10 +67,12 @@ candidate responses, parsing, cleanup, and a heartbeat while it is waiting.
 
 This is browser automation of the official page, not an attempt to bypass
 Barchart controls. The package does not automate sign-in, replay tokens,
-rotate proxies, or call a separate anonymous historical endpoint. If
-Barchart/CloudFront denies the browser session, the function raises
-BarchartInteractiveChartError; that restriction cannot be bypassed by this
-package.
+rotate proxies, disguise automation, or call a separate anonymous Barchart
+historical endpoint. A Barchart/CloudFront denial or browser-session failure
+triggers only the clearly labeled public futures fallback. The fallback
+contains daily OHLCV; Barchart open interest and settlement fields are not
+invented when that source does not publish them. If neither source works, the
+function raises BarchartInteractiveChartError.
 
 The same function accepts another public Barchart asset class:
 
@@ -101,7 +111,9 @@ The package includes:
 The main demonstration is
 notebooks/commodities/corn_futures_demo.ipynb. It uses the real CME/CBOT
 September 2026 Corn contract, ZCU26, and renders candlesticks, volume,
-Bollinger Bands, ATR, RSI, and a rolling volume mean.
+Bollinger Bands, ATR, RSI, and a rolling volume mean. Its source label
+identifies whether the data came from Barchart or the public exact-contract
+fallback.
 
 The agriculture comparison is in
 notebooks/commodities/agriculture_portfolio_demo.ipynb. The equity example is

@@ -11,6 +11,21 @@ class BarchartTransportError(BarchartDataError):
     """Raised when an HTTP request cannot be completed."""
 
 
+class PublicChartError(BarchartDataError):
+    """Raised when the public exact-contract chart feed cannot be read."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        url: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.url = url
+
+
 class BarchartDecodeError(BarchartDataError):
     """Raised when an API response cannot be decoded."""
 

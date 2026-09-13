@@ -10,10 +10,12 @@ py -3.13 -m playwright install chromium
 
 ## Historical ingestion
 
-The package has one supported historical acquisition path. It opens the
+The package has one supported historical acquisition call. It opens the
 official interactive chart in a headless browser session, observes a
 successful same-origin history response produced by that page, normalizes it,
-and returns it in memory:
+and returns it in memory. If Barchart returns HTTP 401 or 403, or the browser
+session cannot run in a notebook event loop, futures use a public
+exact-contract chart feed as a clearly labeled fallback:
 
 ~~~python
 from barchart_data import download_history
@@ -27,8 +29,10 @@ assert imported.path is None
 
 The method does not display a browser window, press the website Download
 control, create a download directory, or retain a browser artifact. It uses
-the chart's default range and interval. Browser configuration is limited to
-the optional executable path, headless setting, and timeout:
+the chart's default range and interval when Barchart is available. The public
+fallback requests daily OHLCV for the exact contract, for example ZCU26.CBT.
+The returned source URL identifies the actual provider. Browser configuration
+is limited to the optional executable path, headless setting, and timeout:
 
 By default it launches Playwright's Chromium channel, which explicitly selects
 the newer headless implementation instead of the legacy headless shell.
@@ -47,11 +51,12 @@ default: 3 reports startup, navigation, candidate responses, parsing, cleanup,
 and a heartbeat while waiting. Use 2 for progress, 1 for errors, or 0 for no
 output.
 
-This workflow uses only requests naturally made by the official page. It does
-not automate sign-in, inspect or export credentials, replay tokens, rotate
-proxies, or call an undocumented standalone historical endpoint. A
-CloudFront, verification, entitlement, or account restriction is reported as
-BarchartInteractiveChartError and is not bypassed.
+The Barchart workflow uses only requests naturally made by the official page.
+It does not automate sign-in, inspect or export credentials, replay tokens,
+rotate proxies, disguise automation, or call an undocumented standalone
+Barchart historical endpoint. The fallback uses a separate public exact-
+contract feed and does not bypass Barchart. If both sources fail,
+BarchartInteractiveChartError is raised.
 
 The lower-level history readers remain available for applications that
 already possess permitted data in memory. They are parsers, not alternate

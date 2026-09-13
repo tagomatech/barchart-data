@@ -137,6 +137,12 @@ class BarchartWebsiteWorkflowTests(unittest.TestCase):
             def __init__(self, chromium):
                 self.chromium = chromium
 
+            def start(self):
+                return self
+
+            def stop(self):
+                return None
+
             def __enter__(self):
                 return self
 
