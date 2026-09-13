@@ -25,9 +25,9 @@ from .history import (
     read_barchart_history_text,
 )
 from .website import (
+    PUBLIC_BARCHART_URL,
     BarchartWebsiteWorkflow,
     ImportedHistory,
-    PUBLIC_BARCHART_URL,
     _validated_base_url,
     _validated_segment,
 )
@@ -264,11 +264,9 @@ class BarchartInteractiveChartWorkflow:
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         try:
-            from playwright.sync_api import (
-                Error as PlaywrightError,
-                TimeoutError as PlaywrightTimeoutError,
-                sync_playwright,
-            )
+            from playwright.sync_api import Error as PlaywrightError
+            from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+            from playwright.sync_api import sync_playwright
         except ImportError as exc:
             raise BarchartInteractiveChartError(
                 'Install the optional browser dependency with '
